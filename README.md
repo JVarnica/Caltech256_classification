@@ -33,7 +33,7 @@ Here are the following results from the linear probing experiment.
 | ConvNext Base | 82.30 |
 | Regnety_040 | 87.11% |
 
-![Model Performance Comparison] (./linear_probe/lp_results/model_acc_comparison.png)
+![Model Performance Comparison](./linear_probe/lp_results/model_acc_comparison.png)
 
 ### Key Observations:
 
