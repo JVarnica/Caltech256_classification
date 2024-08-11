@@ -2,12 +2,11 @@
 
 ## Project Overview
 
-This project conducts a study of how pre-trained models perform on the task of image classification for the Caltech256 dataset. The questions we explore are as follows:
+This project conducts a study of how pre-trained models perform on the task of image classification for the Caltech256 dataset. We explore which model architecture inherently captures the features of the dataset most effectively, and then fine-tune certain models to achieve maximum performance.
 
- - Which pre-trained model is the best feature extractor
- - Which model performs best on the caltech256.
+## Motivation 
 
-To answer these questions the following methodology is used:
+The Caltech256 dataset was picked due to the varying image resolutions and it is regarded as more of a real-world dataset. At first I wanted to use Cifar-100 and perform fine-grained image classification but I visually couldn't distinguish the images. The feature 
 
 1.  **Linear probing**: To evaluate the feature extraction captabilities of models.
 2.  **Simple fine-tuning**: Assessing how well the chosen models adapt to Caltech256 when weights are unfrozen.
