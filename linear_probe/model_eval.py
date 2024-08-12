@@ -1,5 +1,6 @@
-
 import os
+import argparse
+import importlib
 import csv
 import time
 import matplotlib.pyplot as plt
@@ -13,13 +14,9 @@ import nvidia.dali.fn as fn
 import nvidia.dali.types as types
 from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
 
-# config paths. less long
-CALTECH_PROJ_PATH = '/content/drive/MyDrive/caltech_proj'
-M_CHECKPOINTS_DIR = os.path.join(CALTECH_PROJ_PATH, 'models')
-RESULTS_DIR = os.path.join(CALTECH_PROJ_PATH, 'linear_probe', 'lp_results')
-
-os.makedirs(M_CHECKPOINTS_DIR, exist_ok=True)
-os.makedirs(RESULTS_DIR, exist_ok=True)
+def get_exp_config(dataset_name):
+    config_module = importlib.import_module(f'configs.{dataset_name}_config')
+    return getattr(config_module, f'{dataset_name.upper()}_CONFIG')
 
 # Iniatize models add classification head
 class TimmModelWrapper(nn.Module):
@@ -123,16 +120,13 @@ def get_dali_loader(data_dir, batch_size, num_threads, device_id, data_config, i
 def train_and_evaluate(model_wrapper, train_dir, val_dir, batch_size, num_threads, device, num_epochs, data_config):
     model = model_wrapper.to(device)
     optimizer = Adam(model.fc.parameters(), lr=0.001, weight_decay=1e-5)
-    scheduler = StepLR(optimizer, step_size=3, gamma=0.1) # Basic 
+    #scheduler = StepLR(optimizer, step_size=3, gamma=0.1) # Basic 
     criterion = nn.CrossEntropyLoss()
 
-    model_name = model.model_name
+    #model_name = model.model_name
 
     train_loader = get_dali_loader(train_dir, batch_size, num_threads, 0, data_config, is_training=True)
     val_loader = get_dali_loader(val_dir, batch_size, num_threads, 0, data_config, is_training=False)
-
-    checkpoint_dir = os.path.join(M_CHECKPOINTS_DIR, model_name)
-    os.makedirs(checkpoint_dir, exist_ok=True)
 
     train_losses = []
     train_accs = []
@@ -191,20 +185,8 @@ def train_and_evaluate(model_wrapper, train_dir, val_dir, batch_size, num_thread
         val_accuracy = val_correct / val_total
         val_accs.append(val_accuracy)
 
-        # To save model checkpoint/ need best as base.
         if val_accuracy > best_val_acc:
             best_val_acc = val_accuracy
-            checkpoint_state = {
-                'model': model.state_dict(),
-                'optimizer': optimizer.state_dict(),
-                'scheduler': scheduler.state_dict(),
-                'epoch': epoch,
-                'val_acc': val_accuracy
-            }
-            checkpoint_path = os.path.join(checkpoint_dir, f'best model_{model_name}.pth')
-            torch.save(checkpoint_state, checkpoint_path)
-            
-        scheduler.step()
 
         epoch_time = time.time() - e_start_time
         epoch_times.append(epoch_time)
@@ -217,9 +199,9 @@ def train_and_evaluate(model_wrapper, train_dir, val_dir, batch_size, num_thread
 
     return train_losses, train_accs, val_losses, val_accs, epoch_times, best_val_acc
 
-def linear_probing(models, train_dir, val_dir, batch_size, num_threads, device, num_epochs):
+def linear_probing(models, train_dir, val_dir, batch_size, num_threads, device, num_epochs, config):
     results = []
-    csv_file = os.path.join(RESULTS_DIR, 'lprobe_results.csv')
+    csv_file = os.path.join(config['results_dir'], f'{config["dataset_name"]}_lprobe_results.csv')
 
     with open(csv_file, 'w', newline='') as file:
         writer = csv.writer(file)
@@ -275,39 +257,33 @@ def linear_probing(models, train_dir, val_dir, batch_size, num_threads, device, 
         plt.xlabel('Epoch')
         plt.ylabel('Loss')
         plt.legend()
-        plt.savefig(os.path.join(RESULTS_DIR, f'lr_curves_{model_name.split(".")[0]}.png'))
+        plt.savefig(os.path.join(config['results_dir'], f'lr_curves_{model_name.split(".")[0]}.png'))
         plt.close()
         print("Model figure saved")
-
 
     return results
 
 # Usage
 def main():
+    
+    parser = argparse.ArgumentParser(description='Run linear probing on dataset')
+    parser.add_argument('dataset', choices=['caltech256', 'cifar100'], help='Dataset to use')
+    args = parser.parse_args()
 
-    model_list = [ # Trained on Imagenet22k pref if not 1k.
-    ('pvt_v2_b3.in1k', 256), #pvt medium 224x
-    ('vit_base_patch16_224.orig_in21k_ft_in1k', 256),#ViT 224x
-    ('deit3_base_patch16_224.fb_in22k_ft_in1k', 256),  #DeiT 224x
-    ('resnet50.a1_in1k', 256),#resnet 50 
-    ('resnet18.a1_in1k', 256), #resnet 18
-    ('resnet152.a1_in1k', 256), #resnet152
-    ('swin_base_patch4_window7_224.ms_in22k_ft_in1k', 256), #swin 224x
-    ('mixer_b16_224.goog_in21k_ft_in1k', 256), # MLP-Mixer 224
-    ('tf_efficientnetv2_m.in21k_ft_in1k', 256), # Efficient net
-    ('convnext_base.fb_in22k_ft_in1k', 256), #Convnext 
-    ('regnety_040.pycls_in1k', 256) # Regnet 224
-]
-    train_dir = '/content/drive/MyDrive/caltech_proj/data/Caltech256_Split/train'
-    val_dir = '/content/drive/MyDrive/caltech_proj/data/Caltech256_Split/val'
-    batch_size = 128
-    num_threads = 8
-    num_epochs = 20 
+    config = get_exp_config(args.dataset)
+    config['dataset_name'] = args.dataset
+
+    model_list = config['model_list']
+    train_dir = config['train_dir']
+    val_dir = config['val_dir']
+    batch_size = config['batch_size']
+    num_threads = config['num_threads']
+    num_epochs = config['num_epochs']
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    print(f"Starting Experiment...")
+    print(f"Starting Experiment on {args.dataset}...")
     start_time = time.time()
-    results = linear_probing(model_list, train_dir, val_dir, batch_size, num_threads, device, num_epochs)
+    results = linear_probing(model_list, train_dir, val_dir, batch_size, num_threads, device, num_epochs, config)
     end_time = time.time() - start_time
     print(f"\nTotal experiment time: {end_time:.2f}s")
 
@@ -315,18 +291,18 @@ def main():
     model_names = []
     accs = []
     for model_name, accuracy in results:
-      print(f"{model_name}: Accuracy = {accuracy:.4f}")
+      print(f"{model_name}: Accuracy = {accuracy:.6f}")
       model_names.append(model_name.split('.')[0])
       accs.append(accuracy)
 
     plt.figure(figsize=(12, 6))
     plt.bar(model_names, accs)
-    plt.title('Model Performance')
+    plt.title('Model Performance on {args.dataset.upper()}')
     plt.xlabel('Models')
     plt.ylabel('Accuracy')
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
-    plt.savefig(os.path.join(RESULTS_DIR, 'model_acc_comparison.png'))
+    plt.savefig(os.path.join(config['results_dir'], f'{args.dataset}_model_accs.png'))
     
     #Get top 3 results 
     sorted_results = sorted(results, key=lambda x: x[1], reverse=True)
