@@ -1,5 +1,5 @@
 # Using mock data which is just caltech but with 4 img per class and 2 in val. Used instead of unittesting.
-MOCK_CONFIG = {
+MOCK_DATA_CONFIG = {
     'model_list': [ 
     ('pvt_v2_b3.in1k', 256), 
     ('vit_base_patch16_224.orig_in21k_ft_in1k', 256),
