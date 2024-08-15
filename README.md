@@ -42,21 +42,22 @@ Datasets | Caltech256 | Cifar100 | Open Image subset |
 
 Here are the following results from the linear probing experiment.
 
- Model | Caltech256 |   Cifar100 |  
-|-------|-----------|----------------------|
-| PVT V2 B3 | 77.68% |              |
-| ViT Base | 15.38% |               |
-| DeiT3 Base | 13.93% |             |
-| ResNet50 | 82.90% |               |
-| ResNet18 | 75.80% |               |
-| ResNet152 | 80.58% |              |
-| Swin Base | 74.28% |              |
-| MLP-Mixer | 6.73%  |              |
-| EfficientNetV2 M  | 93.20%|       |
-| ConvNext Base | 82.30 |           |
-| Regnety_040 | 87.11% |            |
+|Model |     Caltech256      |  Cifar100             |
+|      | Val Acc (%)| Time(s)| Val Acc (%) | Time(s) |
+|------|------------|--------|-------------|---------|
+| EfNetV2-M | 93.00 | 1042.70 | 64.78   | 2194.13  |
+| RegNetY-040 | 85.86 | 257.56 | 62.64 | 524.62   |
+| Resnet50 | 82.09 | 235.95 | 51.89 |   475.19   |
+| CvNext Base | 82.30 | 663.92 | 51.71 | 1388.22  |
+| Resnet152 | 78.69 | 449.40   | 52.59 | 934.88   |
+| pvt v2 b3 | 77.18 | 655.80  | 50.59  | 1194.28 |
+| Resnet18 | 75.73 | 228.92 | 44.71 | 464.59 |
+| Swin Base | 73.75 | 841.27 | 26.85 | 1754.46  |
+| Vit Base | 14.47 | 591.13 | 18.77  |  1229.89 |
+| DeiT3 Base | 12.22 | 602.61 | 16.69 | 1253.86 |
+| mlp-mixer | 6.46 | 488.35  | 8.96  | 1009.64 |
 
-![Model Performance Comparison](./linear_probe/lp_results/model_acc_comparison.png)
+![Model Performance Comparison](./linear_probe/lp_model_comparison.png)
 
 ### Key Observations:
 
