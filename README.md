@@ -38,7 +38,7 @@ Datasets | Caltech256 | Cifar100 | Open Image subset |
 
 ## Linear Probing 
 
-### Key Findings / Results
+### Key Findings 
 
 Here are the following results from the linear probing experiment.
 

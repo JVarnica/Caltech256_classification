@@ -267,9 +267,10 @@ def linear_probing(models, train_dir, val_dir, batch_size, num_threads, device, 
 def main():
     
     parser = argparse.ArgumentParser(description='Run linear probing on dataset')
-    parser.add_argument('dataset', choices=['caltech256', 'cifar100', 'mock_data'], help='Dataset to use')
+    parser.add_argument('dataset', choices=['mock_data','lp_caltech256', 'lp_cifar100'], help='Dataset to use')
     args = parser.parse_args()
 
+    
     config = get_exp_config(args.dataset)
     config['dataset_name'] = args.dataset
 
