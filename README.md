@@ -42,7 +42,8 @@ Datasets | Caltech256 | Cifar100 | Open Image subset |
 
 Here are the following results from the linear probing experiment.
 
-| Model |  Caltech256|         |  Cifar100   |      |
+| Model |  Caltech256          |  Cifar100             |
+|-------|----------------------|-----------------------|
 |       | Val Acc (%)| Time (s)| Val Acc (%) | Time (s)|
 |-------|------------|-------- |-------------|---------|
 | EfNetV2-M | 93.00 | 1042.70 | 64.78   | 2194.13  |
