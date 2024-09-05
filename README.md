@@ -38,7 +38,9 @@ Datasets | Caltech256 | Cifar100 | Open Image subset |
 
 ## Linear Probing 
 
-### Key Findings 
+How well do models perform when weights are frozen? Removing pre-trained classifier and adding a simple linear layer instead, to use as feature extractor which is trained for 5 epochs. 
+
+### Results
 
 Here are the following results from the linear probing experiment.
 
@@ -62,19 +64,28 @@ Here are the following results from the linear probing experiment.
 
 ### Key Observations:
 
-1. EfficientNetV2 was the best perfoming feature extractor with an outstanding 93.2% accuracy, the model inherently captures the features of Caltech256 best.
-2. The worst performing model is the MLP-mixer with 6.73% which is normal as there is no/little inductive bias, just fully connected layers essentially.
-3.  All models which use convolution for embedding  perform signicantly better than models which uses patches (vit/deit3). Therefore, the hierarchical representation of an image is vital for a feature extractor.
+1. The lower resolution of cifar100 had a significant effect on model performance, eventhough it's double the size of caltech256. Therefore the feature representations extracted from caltech256 carry more information than those of cifar100, to be expected when upsampling from 32x32 to 224x224 pixels creates interpolation artifacts.
+2. The top performer was EfficientNetV2 medium on both datasets with a satisfying 93.00% and 64.78%. The RegNetY-040 performs second best with 85.86% and 62.64%, a small difference of around 2% on cifar100.
+3. The worst performing model is the MLP-mixer with 6.46% and 8.96% due to little inductive bias, CNNs have more relevant inductive/architectural biases therefore perform much better.
 4. Transformers need to be fine-tuned on the dataset in order to be effective, the global & high level features learned are not trasferable to the new task unlike with CNN's which capture more local features.
+5. Essentially any model using a convolutional mechanism for embedding instead of relying on patches perform better as features extractors.
 
 ## Simple Fine-tuning
 
-The following models will be picked for the simple fine-tuning: 
+In this next phase, a selected sub-set of models are picked to be fine-tuned based on their computational efficiency and performance. Our selection also represents the diverse architectures used in the vision domain.
 
-1. EfficientNetV2: Best performing model (CNN)
-2. MLP-Mixer: Worst model, let's see how well performs when trained.
-3. PVT V2 B3: Hybrid model
-4. Deit3: Transformer model.
+Therefore following models will be selected: 
+
+1. RegNetY-040, balance of performance and efficiency. Training time approximately 4 times shorter than efficientnet.
+2. Resnet50, base cnn result.
+3. mlp-mixer, mlp architecture to assess improvement when trained.
+4. PVT-V2, bridges gap between cnn and transformer.
+5. vit base, base vision transformer result.
+
+Furthermore, due to the poor performance of models on cifar100, a custom CNN designed specifically for cifar100 will be trained. It uses smaller stride and kernel sizes. 
+This will provide a comparative point between transfer learning and designing own models. More information on model here (make link!@!!!!)
+
+### Results 
 
 ## Setup and Installation 
 
