@@ -50,6 +50,16 @@ class BaseTimmWrapper(nn.Module):
             raise ValueError(f"Unsupported {self.model_name}")
         # Add new one 
         self.fc = nn.Linear(in_features, num_classes)
+    
+    def get_num_layers(self): 
+        trainable_layers = []
+        for name, param in self.model.named_parameters():
+
+    def gradual_unfreeze(self, num_layers):
+        layers = list(self.base_model.children())
+        for layer in layers[-num_layers:]:
+            for param in layer.parameters():
+                param.requires_grad = True
 
     def forward(self, x):
         features = self.base_model(x)
