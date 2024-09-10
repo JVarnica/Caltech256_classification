@@ -1,10 +1,25 @@
 SIMPLE_FT_CIFAR100_CONFIG = {
     'model_list' : [
-        ('resnet50.a1_in1k', 100, 'gradual'),
-        ('regnety_040.pycls_in1k', 100, 'gradual'),
-        ('mixer_b16_224.goog_in21k_ft_in1k', 100, 'none'),
-        ('pvt_v2_b3.in1k', 100, 'gradual'),
-        ('vit_base_patch16_224.orig_in21k_ft_in1k', 100, 'gradual')
+          {
+            'model_name': 'resnet50.a1_in1k', 
+            'num_classes': 100, 
+            'freeze_mode': 'gradual'
+        },
+        {
+            'model_name': 'regnety_040.pycls_in1k', 
+            'num_classes': 100, 
+            'freeze_mode': 'gradual'
+        },
+        {
+            'model_name': 'pvt_v2_b3.in1k', 
+            'num_classes': 100, 
+            'freeze_mode': 'gradual'
+        },
+        {
+            'model_name': 'vit_base_patch16_224.orig_in21k_ft_in1k', 
+            'num_classes': 100, 
+            'freeze_mode': 'gradual'
+        }
     ],
     'train_dir': '/content/drive/MyDrive/caltech_proj/data/Cifar100/train',
     'val_dir': '/content/drive/MyDrive/caltech_proj/data/Cifar100/val',
