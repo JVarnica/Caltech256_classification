@@ -16,6 +16,16 @@ class BaseTimmWrapper(nn.Module):
         self.setup_classifier(num_classes)
         self.param_groups = self.get_param_groups()
 
+        self.patience = patience 
+        self.min_improvement = min_improvement
+        self.state = {
+            'best_performance': float('-inf'),
+            'epochs_no_imprv': 0,
+            'current_stage': 0,
+            'best_model_state': None,
+            'best_stage': 0 
+        }
+
     def set_base_model_state(self, freeze_mode):
         if freeze_mode == 'full':
             self.base_model.eval()
@@ -91,29 +101,42 @@ class BaseTimmWrapper(nn.Module):
         return param_group
     
     def get_vit_params(self):
+
+        attn = []
+        ffn = []
+        other_params = []
+        
+        for block in self.base_model.blocks:
+            attn.extend(block.attn.parameters())
+            ffn.extend(block.mlp.parameters())
+
+            for name, param in block.named_parameters():
+                if not any(x in name for x in ['attn', 'mlp']):
+                    other_params.append([param])
+
         param_group = [
         {'params': self.base_model.head.parameters(), 'name': 'head'},
-        {'params': self.base_model.cls_token, 'name': 'cls_token'},
-        {'params': self.base_model.pos_embed, 'name': 'pos_embed'},
+        {'params': [self.base_model.cls_token, self.base_model.pos_embed], 'name': 'embeddings'},
         {'params': self.base_model.patch_embed.parameters(), 'name': 'patch_embed'},
-        {'params': [p for block in self.base_model.bloks for p in block.attn.parameters()], 'name': 'attention'},
-        {'params': [p for block in self.base_model.blocks for p in block.mlp.parameters()], 'name': 'FFN'},
-        {'params': self.base_model.norm.parameters(), 'name': 'norm'}
+        {'params': attn, 'name': 'attention'},
+        {'params': ffn, 'name': 'FFN'},
+        {'params': other_params, 'name': 'other_block_params'}
     ]
         return param_group
     
     def get_pvt_params(self):
-        param_group = [
+    
+        param_groups = [
             {'params': self.base_model.head.parameters(), 'name': 'head'},
             {'params': self.base_model.patch_embed.parameters(), 'name': 'patch_embed'}
         ]
-        for i, block in enumerate(self.base_model.blocks):
-            param_group.extend([
-                {'params': [p for layer in block.block for p in layer.attn.parameters()], 'name': f'block{i+1}_attention'},
-                {'params': [p for layer in block.block for p in layer.mlp.parameters()], 'name': f'block{i+1}_mlp'}
-            ])
-        return param_group
 
+        for i, stage in enumerate(self.base_model.stages):
+            param_groups.append({
+                'params': stage.parameters(),'name': f'stage{i}'
+            })
+        return param_groups
+    
     def get_trainable_params(self):
         return filter(lambda p: p.requires_grad, self.parameters())
     
@@ -155,11 +178,10 @@ class BaseTimmWrapper(nn.Module):
 
         unfreeze_schedule = [
             (0.0, 'head'),
-            (0.1, 'norm'),
-            (0.2, 'mlp'),
+            (0.2, 'FFN'),
             (0.4, 'attention'),
-            (0.6, 'pos_embed')
-            (0.6, 'cls_token')
+            (0.6, 'other_block')
+            (0.7, 'embeddings')
         ]
         current_progress = epoch / total_epochs
 
@@ -179,32 +201,23 @@ class BaseTimmWrapper(nn.Module):
     
     def unfreeze_pvt(self, epoch, total_epochs, performance_metric):
         
-        for group in self.param_groups:
-            if group['name'] == 'head':
-                for param in group['params']:
-                    param.requires_grad = True
-                break 
-        
-        num_blocks = len(self.base_model.blocks)
-        epochs_per_block = total_epochs // (num_blocks + 1)
+        num_stages = len(self.base_model.stages)
+        epochs_per_unfreeze = max(1, total_epochs // (num_stages + 1))  # +1 for patch_embed
 
-        if epoch < epochs_per_block:
-            return 
-        
-        for i in range(num_blocks):
-            if epoch >= (i + 1) * epochs_per_block:
-                block_num = num_blocks - i
+        current_unfreeze = min(epoch // epochs_per_unfreeze, num_stages)
 
+        parts_to_unfreeze = [f'stage{i}' for i in range(num_stages-1, -1, -1)] + ['patch_embed']
+
+        for i, part in enumerate(parts_to_unfreeze):
+            if i <= current_unfreeze:
                 for group in self.param_groups:
-                    if group['name'] == f'block{block_num}_mlp':
+                    if group['name'].startswith(part):
                         for param in group['params']:
                             param.requires_grad = True
 
-                for group in self.param_groups:
-                    if group['name'] == f'block{block_num}_attention':
-                        for param in group['params']:
-                            param.requires_grad = True
-        # missing few things to add. lot more in block
+        print(f"Adjusted Epoch {epoch}: Unfreezing up to {parts_to_unfreeze[current_unfreeze]}")
+        
+        
                             
 
         
