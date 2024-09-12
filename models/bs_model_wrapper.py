@@ -89,7 +89,7 @@ class BaseTimmWrapper(nn.Module):
     
     def get_regnety_params(self):
         param_group = [
-             {'params': self.base_model.head.fc.parameters(), 'name': 'head'},
+        {'params': self.base_model.head.fc.parameters(), 'name': 'head'},
         {'params': self.base_model.s4.parameters(), 'name': 'block4'},
         {'params': self.base_model.s3.parameters(), 'name': 'block3'},
         {'params': self.base_model.s2.parameters(), 'name': 'block2'},
@@ -119,11 +119,10 @@ class BaseTimmWrapper(nn.Module):
         {'params': other_params, 'name': 'other_block_params'},
         {'params': [self.base_model.cls_token, self.base_model.pos_embed], 'name': 'embeddings'},
         {'params': self.base_model.patch_embed.parameters(), 'name': 'patch_embed'}
-    ]
+        ]
         return param_group
     
     def get_pvt_params(self):
-    
         param_group = [
             {'params': self.base_model.head.parameters(), 'name': 'head'},
             {'params': self.base_model.patch_embed.parameters(), 'name': 'patch_embed'},
@@ -133,6 +132,7 @@ class BaseTimmWrapper(nn.Module):
             {'params': self.base_model.stages.0.parameters(), 'name': 'stage 1'}
         ]
         return param_group
+    
     def adaptive_unfreeze(self, epoch, total_epochs, performance_metric=None):
         if self.freeze_mode != 'gradual':
             return False, None
