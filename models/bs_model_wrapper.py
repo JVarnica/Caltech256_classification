@@ -6,7 +6,7 @@ import torch.nn as nn
 import copy
 
 class BaseTimmWrapper(nn.Module):
-    def __init__(self, model_name, num_classes, freeze_mode='full', unfreeze_epoch=None):
+    def __init__(self, model_name, num_classes, freeze_mode='full', unfreeze_epochs=None):
         super().__init__()
         self.base_model = timm.create_model(model_name, pretrained=True, num_classes=num_classes)
         self.data_config = timm.data.resolve_model_data_config(self.base_model)
@@ -17,13 +17,15 @@ class BaseTimmWrapper(nn.Module):
         self.setup_classifier(num_classes)
         self.param_groups = self.get_param_groups()
         self.stages = [group['name'] for group in self.param_groups]
-        self.unfreeze_epoch = unfreeze_epoch or [0] * len(self.stages)
+        self.unfreeze_epoch = unfreeze_epochs
 
         self.unfreeze_state = {
             'current_stage': 0,
-            'total_stages': len(self.param_groups)
+            'total_stages': len(self.param_groups),
+            'stage_history': [],
+            'best_performance': 0
         }
-
+        
     def set_base_model_state(self, freeze_mode):
         if freeze_mode == 'full':
             self.base_model.eval()
@@ -126,14 +128,14 @@ class BaseTimmWrapper(nn.Module):
         param_group = [
             {'params': self.base_model.head.parameters(), 'name': 'head'},
             {'params': self.base_model.patch_embed.parameters(), 'name': 'patch_embed'},
-            {'params': self.base_model.stages.3.parameters(), 'name': 'stage 4'},
-            {'params': self.base_model.stages.2.parameters(), 'name': 'stage 3'},
-            {'params': self.base_model.stages.1.parameters(), 'name': 'stage 2'},
-            {'params': self.base_model.stages.0.parameters(), 'name': 'stage 1'}
+            {'params': self.base_model.stages[3].parameters(), 'name': 'stage 4'},
+            {'params': self.base_model.stages[2].parameters(), 'name': 'stage 3'},
+            {'params': self.base_model.stages[1].parameters(), 'name': 'stage 2'},
+            {'params': self.base_model.stages[0].parameters(), 'name': 'stage 1'}
         ]
         return param_group
     
-    def adaptive_unfreeze(self, epoch, total_epochs, performance_metric=None):
+    def adaptive_unfreeze(self, epoch, performance_metric):
         if self.freeze_mode != 'gradual':
             return False, None
        
@@ -145,7 +147,13 @@ class BaseTimmWrapper(nn.Module):
             for i in range(current_stage):
                 for param in self.param_groups[i]['params']:
                     param.requires_grad = True
-            return False, self.state_dict().copy()
+
+            reason = 'epoch' if epoch in self.unfreeze_epoch else 'performance'
+            self.unfreeze_state['state_history'].append((current_stage, reason))
+            return True, self.state_dict().copy()
+        
+        if performance_metric > self.unfreeze_state['best_performance']:
+            self.unfreeze_state['best_performance'] = performance_metric
 
         return False, None
     
