@@ -142,6 +142,7 @@ class BaseTimmWrapper(nn.Module):
         current_stage = next((i for i, e in enumerate(self.unfreeze_epoch) if epoch < e), len(self.stages))
         
         if current_stage > self.unfreeze_state['current_stage']:
+            previous_state = self.state_dict().copy() # Save state befr nxt stage 
             print(f"Unfreezing stage {current_stage}: {self.stages[current_stage-1]}")
             self.unfreeze_state['current_stage'] = current_stage
             for i in range(current_stage):
@@ -150,7 +151,7 @@ class BaseTimmWrapper(nn.Module):
 
             reason = 'epoch' if epoch in self.unfreeze_epoch else 'performance'
             self.unfreeze_state['state_history'].append((current_stage, reason))
-            return True, self.state_dict().copy()
+            return True, previous_state
         
         if performance_metric > self.unfreeze_state['best_performance']:
             self.unfreeze_state['best_performance'] = performance_metric
