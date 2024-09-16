@@ -67,17 +67,37 @@ def validate(model, val_loader, criterion, device):
 
     return avg_loss, accuracy
 
+def handle_new_stage(model, optimizer, scheduler, stage_best_val_acc, stage_checkpoint, stage_results, epoch, lr, weight_decay, scheduler_patience):
+        if stage_checkpoint is not None:
+            stage_results.appemd({
+                'stage': model.unfreeze_state['current_stage'] - 1,
+                'val_acc': stage_best_val_acc,
+                'model_state': stage_checkpoint,
+                'epoch': epoch - 1
+            })
+            logging.info(f"Saved optimal results/model for stage{model.unfreeze_state['current_stage']-1}")
+
+        stage_best_val_acc = 0
+        stage_checkpoint = None
+        optimizer = AdamW(model.get_trainable_params(), lr, weight_decay)
+        scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=scheduler_patience, verbose=True)
+        return optimizer, scheduler, stage_best_val_acc, stage_checkpoint
+
 
 def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_epochs, config):
     best_val_acc = 0
+    stage_best_val_acc = 0
     best_model_state = None
+    stage_checkpoint = None
     train_losses, train_accs, val_losses, val_accs, epoch_times = [], [], [], [], []
+    stage_results = []
+    epochs_no_improve = 0
     lr = config['learning_rate']
     weight_decay = config['weight_decay']
-    min_improvement = config['min_improvement']
+    min_improvement = config['min_improvement'] 
     early_stop_patience= config['early_stop_patience']
     scheduler_patience = config['scheduler_patience']
-    epochs_no_imprv = 0 
+    
 
     optimizer = AdamW(model.get_trainable_params(), lr, weight_decay)
     scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=scheduler_patience, verbose=True)
@@ -86,11 +106,14 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
 
     for epoch in range(num_epochs):
         epoch_start_time = time.time()
-        new_stage, previous_stage_state = model.adaptive_unfreeze(epoch, num_epochs, best_val_acc)
+        patience_reached = model.unfreeze_state['epochs_no_improve'] >= early_stop_patience
+        new_stage  = model.adaptive_unfreeze(epoch, num_epochs, best_val_acc, patience_reached)
         if new_stage:
-            optimizer = AdamW(model.get_trainable_params(), lr, weight_decay)
-            scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=scheduler_patience, verbose=True)
-            epochs_no_imprv = 0
+            optimizer, scheduler, stage_best_val_acc, stage_checkpoint = handle_new_stage(
+                model, optimizer, scheduler, stage_best_val_acc, stage_checkpoint, stage_results,
+                epoch, lr, weight_decay, scheduler_patience
+            )
+            epochs_no_improve = 0
         
         model.train()
         train_loss, train_acc = train_epoch(model, train_loader, optimizer, criterion, device)
@@ -107,44 +130,64 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
         val_accs.append(val_acc)
         epoch_times.append(epoch_time)
 
-        if val_acc > best_val_acc + min_improvement:
+        if val_acc > val_accs[-1] + min_improvement:
             best_val_acc = val_acc
-            best_model_state = model.state_dict().copy()
-            torch.save(best_model_state, f'{config['model_name']}_{config['dataset_name']}_best.pth')
-            epochs_no_imprv = 0
+            stage_checkpoint = model.state_dict().copy()
+            epochs_no_improve = 0
         else:
-            epochs_no_imprv += 1
+            epochs_no_improve += 1
 
-        logging.info(f'Epoch {epoch+1}/{num_epochs}, Epoch Time: {epoch_time:2f}s'
+        if val_acc > stage_best_val_acc:
+            stage_best_val_acc = val_acc
+            stage_checkpoint = model.state_dict().copy()
+        
+
+        logging.info(f'Epoch {epoch+1}/{num_epochs}, Epoch Time: {epoch_time:2f}s, '
                      f'Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, '
-              f'Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}')
+                     f'Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}')
 
         #Logic of early stopping
-        if epochs_no_imprv >= early_stop_patience:
-            if model.unfreeze_state['current_stage'] < model.unfreeze_state['total_stages'] - 1:
-                if model.unfreeze_state['stage_history'] and model.unfreeze_state['stage_history'][-1][1] == 'performance':
-                    logging.info(f"No Improvement for {early_stop_patience}, after stage change. Early Stopping Activated!!")
-                    break
-                else:
-                    new_stage,_ = model.adaptive_unfreeze(epoch, num_epochs, best_val_acc)
-                    if new_stage:
-                        optimizer = AdamW(model.get_trainable_params(), lr, weight_decay)
-                        scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=scheduler_patience, verbose=True)
-                        epochs_no_imprv = 0
-                        logging.info(f"Moving onto stage {model.unfreeze_state['current_stage']+ 1}")
-                    else:
-                        logging.info(f"Patience Reached and Fully Unfrozen!!")
-                        break
+
+        if patience_reached:
+            if model.unfreeze_state['stage_history'] and  model.unfreeze_state['stage_history'][-1][1] == 'performance':
+                logging.info(f"No Improvement for {early_stop_patience}, after stage change. Early Stopping Activated!!")
+            break
+        else:
+            new_stage = model.adaptive_unfreeze(epoch, num_epochs, best_val_acc, patience_reached)
+            if new_stage:
+                optimizer, scheduler, stage_best_val_acc, stage_checkpoint = handle_new_stage(
+                    model, optimizer, scheduler, stage_best_val_acc, stage_checkpoint, stage_results,
+                    epoch, lr, weight_decay, scheduler_patience
+                )
+                epochs_no_improve = 0
             else:
-                logging.info(f"No more Stages!!")
-                break
+                logging.info(f"No more stages. Early Stopping")
+            
+    if stage_checkpoint is not None:
+        stage_results.append({
+            'stage': model.unfreeze_state['current_stage'],
+            'val_acc': stage_best_val_acc,
+            'model_state': stage_checkpoint,
+            'epoch': epoch
+        })
+        logging.info(f"Saved final stage checkpoint, {model.unfreeze_state['current_stage']}")
+
     total_time = time.time() - start_time()
     logging.info(f"{model.model_name} total training time: {total_time:.4f} seconds")
+
     if best_model_state is not None:
         model.load_state_dict(best_model_state)
 
-    return train_losses, train_accs, val_losses, val_accs, best_val_acc, epoch_times, total_time
-
+    return {
+        'train_losses':train_losses, 
+        'train_accs':train_accs, 
+        'val_losses': val_losses, 
+        'val_accs': val_accs, 
+        'best_val_acc': best_val_acc, 
+        'epoch_times': epoch_times, 
+        'total_time': total_time, 
+        'stage_results': stage_results
+    }
 def run_experiment(config, model_name):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -162,25 +205,24 @@ def run_experiment(config, model_name):
     val_loader = get_dali_loader(config['val_dir'], config['batch_size'], 
                                  config['num_threads'], 0, model.get_config(), is_training=False)
     
-    train_losses, train_accs, val_losses, val_accs, best_val_acc, epoch_times, total_time= train_and_evaluate(
+    results = train_and_evaluate(
         model, train_loader, val_loader, criterion, device, config['num_epochs'], config
     )
     
-    result = {
-        'model_name': model_name,
-        'best_val_acc': best_val_acc,
-        'train_losses': train_losses,
-        'train_accs': train_accs,
-        'val_losses': val_losses,
-        'val_accs': val_accs,
-        'epoch_time': epoch_times,
-        'total_time': total_time
-    }
+    torch.save(results['overall_best_model_state'], f'{config["model_name"]}_overall_best.pth')
+
+    #  Save stage-wise best models and print results
+    for stage_result in results['stage_best_results']:
+        torch.save(stage_result['model_state'], f'{config["model_name"]}_stage_{stage_result["stage"]}_best.pth')
+        print(f"Stage {stage_result['stage']} Best Val Acc: {stage_result['val_acc']:.4f} (Epoch {stage_result['epoch']})")
+
+    print(f"Overall Best Val Acc: {results['overall_best_val_acc']:.4f}")
     
     # Save results
-    save_results(result, config['results_dir'], model_name)
+    save_results(results, config['results_dir'], model_name)
 
-    return result
+    return results
+
 
 def save_results(result, results_dir, model_name):
     os.makedirs(results_dir, exist_ok=True)

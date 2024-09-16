@@ -17,13 +17,13 @@ class BaseTimmWrapper(nn.Module):
         self.setup_classifier(num_classes)
         self.param_groups = self.get_param_groups()
         self.stages = [group['name'] for group in self.param_groups]
-        self.unfreeze_epoch = unfreeze_epochs
+        self.unfreeze_epochs = unfreeze_epochs
 
         self.unfreeze_state = {
             'current_stage': 0,
             'total_stages': len(self.param_groups),
             'stage_history': [],
-            'best_performance': 0
+            'best_performance': 0,
         }
         
     def set_base_model_state(self, freeze_mode):
@@ -39,7 +39,6 @@ class BaseTimmWrapper(nn.Module):
             self.base_model.eval()
             for param in self.base_model.parameters():
                 param.requires_grad = False
-            # Gradual unfreezing will be handled during training
         else:
             raise ValueError(f"Unsupported freeze mode: {freeze_mode}")
 
@@ -135,31 +134,47 @@ class BaseTimmWrapper(nn.Module):
         ]
         return param_group
     
-    def adaptive_unfreeze(self, epoch, performance_metric):
-        if self.freeze_mode != 'gradual':
-            return False, None
-       
-        current_stage = next((i for i, e in enumerate(self.unfreeze_epoch) if epoch < e), len(self.stages))
-        
-        if current_stage > self.unfreeze_state['current_stage']:
-            previous_state = self.state_dict().copy() # Save state befr nxt stage 
-            print(f"Unfreezing stage {current_stage}: {self.stages[current_stage-1]}")
-            self.unfreeze_state['current_stage'] = current_stage
-            for i in range(current_stage):
-                for param in self.param_groups[i]['params']:
-                    param.requires_grad = True
 
-            reason = 'epoch' if epoch in self.unfreeze_epoch else 'performance'
-            self.unfreeze_state['state_history'].append((current_stage, reason))
-            return True, previous_state
+    def get_trainable_params(self):
+        return filter(lambda p: p.requires_grad, self.base_model.parameters())
+       
+    
+    def adaptive_unfreeze(self, epoch, performance_metric, patience_reached=False):
+        if self.freeze_mode != 'gradual':
+            return False
+        
+        current_stage = self.unfreeze_state['current_stage']
+        total_stages = self.unfreeze_state['total_stages']
+
+        new_stage = False
+        if current_stage < total_stages - 1:
+            if epoch in self.unfreeze_epochs:
+                for param in self.param_groups[current_stage]['params']:
+                    param.requires_grad = True
+                current_stage += 1
+                self.unfreeze_state['stage_history'].append((current_stage + 1, 'epoch'))
+                new_stage = True
+            elif patience_reached:
+                for param in self.param_groups[current_stage]['params']:
+                    param.requires_grad = True
+                current_stage += 1
+                self.unfreeze_state['stage_history'].append((current_stage + 1, 'performance'))
+                new_stage = True
         
         if performance_metric > self.unfreeze_state['best_performance']:
             self.unfreeze_state['best_performance'] = performance_metric
+        
+        self.unfreeze_state['current_stage'] = current_stage
+        return new_stage
 
-        return False, None
+    def full_finetune(self):
+        for param in self.base_model.parameters():
+            param.requires_grad = True
+        self.unfreeze_state['current_stage'] = self.unfreeze_state['total_stages']
+        self.unfreeze_state['stage_history'].append((self.unfreeze_state['total_stages'], 'full'))
+        return True
+
     
-    def get_trainable_params(self):
-        return filter(lambda p: p.requires_grad, self.parameters())
         
         
         

@@ -3,22 +3,22 @@ SIMPLE_FT_CIFAR100_CONFIG = {
           {
             'model_name': 'resnet50.a1_in1k', 
             'freeze_mode': 'gradual',
-          'unfreeze_epoch': [0, 5, 10, 15, 20, 25]
+          'unfreeze_epochs': [0, 5, 10, 15, 20, 25]
         },
         {
             'model_name': 'regnety_040.pycls_in1k', 
             'freeze_mode': 'gradual',
-            'unfreeze_epoch': [0, 5, 10, 15, 20, 25]
+            'unfreeze_epochs': [0, 5, 10, 15, 20, 25]
         },
         {
             'model_name': 'pvt_v2_b3.in1k', 
             'freeze_mode': 'gradual',
-            'unfreeze_epoch': [0, 5, 10, 15, 20, 25]
+            'unfreeze_epochs': [0, 5, 10, 15, 20, 25]
         },
         {
             'model_name': 'vit_base_patch16_224.orig_in21k_ft_in1k', 
             'freeze_mode': 'gradual',
-            'unfreeze_epoch': [0, 5, 10, 15, 20, 25]
+            'unfreeze_epochs': [0, 5, 10, 15, 20, 25]
         }
     ],
     'train_dir': '/content/drive/MyDrive/caltech_proj/data/Cifar100/train',
