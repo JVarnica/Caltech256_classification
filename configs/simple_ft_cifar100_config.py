@@ -21,6 +21,7 @@ SIMPLE_FT_CIFAR100_CONFIG = {
             'unfreeze_epochs': [0, 5, 10, 15, 20, 25]
         }
     ],
+    'dataset_name': 'cifar100',
     'train_dir': '/content/drive/MyDrive/caltech_proj/data/Cifar100/train',
     'val_dir': '/content/drive/MyDrive/caltech_proj/data/Cifar100/val',
     'results_dir': '/content/drive/MyDrive/caltech_proj/caltech_proj/simple_ft/sft_cf_results',

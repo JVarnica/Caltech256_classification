@@ -270,7 +270,7 @@ def run_experiment(config, model_name):
 
 def main():
     parser = argparse.ArgumentParser(description='Run fine-tuning on dataset')
-    parser.add_argument('dataset', choices=['caltech256', 'cifar100'], help='Dataset to use')
+    parser.add_argument('dataset', choices=['caltech256', 'cifar100', 'mock_data'], help='Dataset to use')
     parser.add_argument('model', help='Model to fine-tune')
     args = parser.parse_args()
 
