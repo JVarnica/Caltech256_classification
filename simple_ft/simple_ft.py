@@ -130,7 +130,7 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
         val_accs.append(val_acc)
         epoch_times.append(epoch_time)
 
-        if val_acc > val_accs[-1] + min_improvement:
+        if val_acc > best_val_acc + min_improvement:
             best_val_acc = val_acc
             stage_checkpoint = model.state_dict().copy()
             epochs_no_improve = 0
@@ -186,43 +186,9 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
         'best_val_acc': best_val_acc, 
         'epoch_times': epoch_times, 
         'total_time': total_time, 
-        'stage_results': stage_results
+        'stage_results': stage_results,
+        'best_model_state': best_model_state
     }
-def run_experiment(config, model_name):
-
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    
-    print(f"Running experiment for {model_name}")
-    
-    model = BaseTimmWrapper(config['model_name'], config['num_classes'], 
-                            freeze_mode=config['freeze_mode'])
-    model = model.to(device)
-    
-    criterion = nn.CrossEntropyLoss()
-    
-    train_loader = get_dali_loader(config['train_dir'], config['batch_size'], 
-                                   config['num_threads'], 0, model.get_config(), is_training=True)
-    val_loader = get_dali_loader(config['val_dir'], config['batch_size'], 
-                                 config['num_threads'], 0, model.get_config(), is_training=False)
-    
-    results = train_and_evaluate(
-        model, train_loader, val_loader, criterion, device, config['num_epochs'], config
-    )
-    
-    torch.save(results['overall_best_model_state'], f'{config["model_name"]}_overall_best.pth')
-
-    #  Save stage-wise best models and print results
-    for stage_result in results['stage_best_results']:
-        torch.save(stage_result['model_state'], f'{config["model_name"]}_stage_{stage_result["stage"]}_best.pth')
-        print(f"Stage {stage_result['stage']} Best Val Acc: {stage_result['val_acc']:.4f} (Epoch {stage_result['epoch']})")
-
-    print(f"Overall Best Val Acc: {results['overall_best_val_acc']:.4f}")
-    
-    # Save results
-    save_results(results, config['results_dir'], model_name)
-
-    return results
-
 
 def save_results(result, results_dir, model_name):
     os.makedirs(results_dir, exist_ok=True)
@@ -259,6 +225,49 @@ def save_results(result, results_dir, model_name):
     logging.info(f"{model_name} results saved!!")
     plt.close()
 
+def run_experiment(config, model_name):
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    print(f"Running experiment for {model_name}")
+
+    
+    model = BaseTimmWrapper(config['model_name'], config['num_classes'], 
+                            freeze_mode=config['freeze_mode'], unfreeze_epochs=config['unfreeze_epochs'])
+    model = model.to(device)
+    
+    criterion = nn.CrossEntropyLoss()
+    
+    train_loader = get_dali_loader(config['train_dir'], config['batch_size'], 
+                                   config['num_threads'], 0, model.get_config(), is_training=True)
+    val_loader = get_dali_loader(config['val_dir'], config['batch_size'], 
+                                 config['num_threads'], 0, model.get_config(), is_training=False)
+    
+    results = train_and_evaluate(
+        model, train_loader, val_loader, criterion, device, config['num_epochs'], config
+    )
+    
+    base_dir = os.path.dirname(os.path.dirname(config['results_dir']))
+    models_dir = os.path.join(base_dir, 'models')
+    spef_model_dir = os.path.join(models_dir, model_name)
+    os.makedirs(spef_model_dir, exist_ok=True)
+
+    best_model_path = os.path.join(spef_model_dir,  f'{config["model_name"]}_overall_best.pth')
+    torch.save(results['best_model_state'], best_model_path)
+    logging.info(f"Saved best {model_name} to {best_model_path}")
+
+    #  Save stage-wise best models and print results
+    for stage_result in results['stage_results']:
+        stage_best_path = os.path.join(spef_model_dir, f'{config["dataset_name"]}_stage_{stage_result["stage"]}_best.pth')
+        torch.save(stage_result['model_state'], stage_best_path)
+        logging.info(f"Stage {stage_result['stage']} Best Val Acc: {stage_result['val_acc']:.4f} "
+                     f"(Epoch {stage_result['epoch']}), Saved to {stage_best_path} ")
+    
+    # Save results
+    save_results(results, config['results_dir'], model_name)
+
+    return results
+
 def main():
     parser = argparse.ArgumentParser(description='Run fine-tuning on dataset')
     parser.add_argument('dataset', choices=['caltech256', 'cifar100'], help='Dataset to use')
@@ -266,6 +275,7 @@ def main():
     args = parser.parse_args()
 
     config = get_exp_config(args.dataset)
+    config['dataset_name'] = args.dataset
     
     model_config = next((m for m in config['model_list'] if m['model_name'] == args.model), None)
 
