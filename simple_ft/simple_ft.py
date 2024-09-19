@@ -10,14 +10,21 @@ import torch
 import torch.nn as nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from linear_probe.model_eval import get_dali_loader
-from models.bs_model_wrapper import BaseTimmWrapper
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(messages)s')
 
 def get_exp_config(dataset_name):
     config_module = importlib.import_module(f'configs.{dataset_name}_config')
     return getattr(config_module, f'{dataset_name.upper()}_CONFIG')
+
+def get_dali_loader():
+    # Lazy import loader for tests.
+    module = importlib.import_module('linear_probe.model_eval')
+    return module.get_dali_loader
+
+def get_base_model():
+    module = importlib.import_module('models.bs_model_wrapper')
+    return module.BaseTimmWrapper
 
 def train_epoch(model, train_loader, optimizer, criterion, device):
     model.train()
@@ -231,16 +238,17 @@ def run_experiment(config, model_name):
     
     print(f"Running experiment for {model_name}")
 
-    
+    BaseTimmWrapper = get_base_model()
     model = BaseTimmWrapper(config['model_name'], config['num_classes'], 
                             freeze_mode=config['freeze_mode'], unfreeze_epochs=config['unfreeze_epochs'])
     model = model.to(device)
     
     criterion = nn.CrossEntropyLoss()
     
-    train_loader = get_dali_loader(config['train_dir'], config['batch_size'], 
+    dali_loader = get_dali_loader()
+    train_loader = dali_loader(config['train_dir'], config['batch_size'], 
                                    config['num_threads'], 0, model.get_config(), is_training=True)
-    val_loader = get_dali_loader(config['val_dir'], config['batch_size'], 
+    val_loader = dali_loader(config['val_dir'], config['batch_size'], 
                                  config['num_threads'], 0, model.get_config(), is_training=False)
     
     results = train_and_evaluate(

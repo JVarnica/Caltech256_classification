@@ -1,25 +1,35 @@
 import sys
-sys.path.append('/Users/julienvarnica/Documents/JuJu/LEARN/caltech_proj')
+from unittest.mock import MagicMock
+
+"""sys.modules['linear_probe'] = MagicMock()
+sys.modules['linear_probe.model_eval'] = MagicMock()
+sys.modules['linear_probe.model_eval'].get_dali_loader = MagicMock()
+
+sys.modules['models'] = MagicMock()
+sys.modules['models.bs_model_wrapper'] = MagicMock()
+sys.modules['models.bs_model_wrapper'].BaseTimmWrapper = MagicMock()"""
+
 import unittest
 import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 from simple_ft import train_epoch, validate, handle_new_stage, save_results, get_exp_config
 import os
-import shutil
 import tempfile
 
 class TestSimpleFT(unittest.TestCase):
     @classmethod
+    def setUpClass(cls):
+        cls.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     def setUp(self):
-        self.model = nn.Linear(100, 10)
+        self.model = nn.Linear(3 * 224 * 224, 10)
         self.model.to(self.device)
         self.mock_data = torch.randn(100, 3, 224, 224)
         self.mock_labels = torch.radint(0, 10, (100,))
         self.dataset = TensorDataset(self.mock_data, self.mock_labels)
         self.dataloader = DataLoader(self.dataset, batch_size=32)
         self.criterion = nn.CrossEntropyLoss()
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
     def test_train_epoch(self):
@@ -75,6 +85,7 @@ class TestSimpleFT(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    print("Startign unittest main")
     unittest.main()
 
     
