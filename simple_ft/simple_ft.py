@@ -11,11 +11,11 @@ import torch.nn as nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(messages)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def get_exp_config(dataset_name):
-    config_module = importlib.import_module(f'configs.{dataset_name}_config')
-    return getattr(config_module, f'{dataset_name.upper()}_CONFIG')
+    config_module = importlib.import_module(f'configs.simple_ft_{dataset_name}_config')
+    return getattr(config_module, f'SIMPLE_FT_{dataset_name.upper()}_CONFIG')
 
 def get_dali_loader():
     # Lazy import loader for tests.
@@ -33,7 +33,7 @@ def train_epoch(model, train_loader, optimizer, criterion, device):
     total = 0
 
     for data in train_loader:
-        inputs, labels = data[0]['image'], data[0]['label'].squeeze(-1).long()
+        inputs, labels  = data[0]['image'], data[0]['label'].squeeze(-1).long()
         inputs, labels = inputs.to(device), labels.to(device)
 
         optimizer.zero_grad()
@@ -47,7 +47,7 @@ def train_epoch(model, train_loader, optimizer, criterion, device):
         total += labels.size(0)
         correct += (predicted == labels).sum().item()
     avg_loss = total_loss / len(train_loader)
-    accuracy = 100 * correct / total
+    accuracy = 100 * (correct / total)
 
     return avg_loss, accuracy
 
@@ -70,13 +70,13 @@ def validate(model, val_loader, criterion, device):
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
     avg_loss = total_loss / len(val_loader)
-    accuracy = 100 * correct / total 
+    accuracy = 100 * (correct / total)
 
     return avg_loss, accuracy
 
 def handle_new_stage(model, optimizer, scheduler, stage_best_val_acc, stage_checkpoint, stage_results, epoch, lr, weight_decay, scheduler_patience):
         if stage_checkpoint is not None:
-            stage_results.appemd({
+            stage_results.append({
                 'stage': model.unfreeze_state['current_stage'] - 1,
                 'val_acc': stage_best_val_acc,
                 'model_state': stage_checkpoint,
@@ -86,7 +86,7 @@ def handle_new_stage(model, optimizer, scheduler, stage_best_val_acc, stage_chec
 
         stage_best_val_acc = 0
         stage_checkpoint = None
-        optimizer = AdamW(model.get_trainable_params(), lr, weight_decay)
+        optimizer = AdamW(model.get_trainable_params(), lr=lr, weight_decay=weight_decay)
         scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=scheduler_patience, verbose=True)
         return optimizer, scheduler, stage_best_val_acc, stage_checkpoint
 
@@ -207,7 +207,7 @@ def save_results(result, results_dir, model_name):
         writer.writerow(['Epoch', 'Train Loss', 'Train Acc', 'Val Loss', 'Val Acc', 'Epoch Time'])
         for i in range(len(result['train_losses'])):
             writer.writerow([i+1, result['train_losses'][i], result['train_accs'][i], 
-                             result['val_losses'][i], result['val_accs'][i], result['epoch_time']])
+                             result['val_losses'][i], result['val_accs'][i], result['epoch_times']])
     
     # Plot and save learning curves
     plt.figure(figsize=(12, 4))
