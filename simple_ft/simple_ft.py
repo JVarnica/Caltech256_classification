@@ -113,9 +113,10 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
 
     for epoch in range(num_epochs):
         epoch_start_time = time.time()
-        patience_reached = model.unfreeze_state['epochs_no_improve'] >= early_stop_patience
-        new_stage  = model.adaptive_unfreeze(epoch, num_epochs, best_val_acc, patience_reached)
+       
+        new_stage  = model.adaptive_unfreeze(epoch, num_epochs, best_val_acc, False)
         if new_stage:
+            logging.info(f"Epoch {epoch+1}: Scheduled stage transition")
             optimizer, scheduler, stage_best_val_acc, stage_checkpoint = handle_new_stage(
                 model, optimizer, scheduler, stage_best_val_acc, stage_checkpoint, stage_results,
                 epoch, lr, weight_decay, scheduler_patience
@@ -155,20 +156,23 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
 
         #Logic of early stopping
 
-        if patience_reached:
-            if model.unfreeze_state['stage_history'] and  model.unfreeze_state['stage_history'][-1][1] == 'performance':
-                logging.info(f"No Improvement for {early_stop_patience}, after stage change. Early Stopping Activated!!")
-            break
-        else:
-            new_stage = model.adaptive_unfreeze(epoch, num_epochs, best_val_acc, patience_reached)
-            if new_stage:
-                optimizer, scheduler, stage_best_val_acc, stage_checkpoint = handle_new_stage(
-                    model, optimizer, scheduler, stage_best_val_acc, stage_checkpoint, stage_results,
-                    epoch, lr, weight_decay, scheduler_patience
-                )
-                epochs_no_improve = 0
+        if epochs_no_improve >= early_stop_patience:
+            if not model.unfreeze_state['stage_history'] or  model.unfreeze_state['stage_history'][-1][1] != 'performance': #empty OR performance
+                new_stage = model.adaptive_unfreeze(epoch, num_epochs, best_val_acc, True)
+                if new_stage:
+                    logging.info(f"No improv for {early_stop_patience} epochs. Moving to next stage as history flag good")
+                    optimizer, scheduler, stage_best_val_acc, stage_checkpoint = handle_new_stage(
+                        model, optimizer, scheduler, stage_best_val_acc, stage_checkpoint, stage_results,
+                        epoch, lr, weight_decay, scheduler_patience
+                    )
+                    epochs_no_improve = 0
+                else:
+                    logging.info(f"No more stages available. Early Stopping")
+                    break
             else:
-                logging.info(f"No more stages. Early Stopping")
+                logging.info(f"No Improvement for {early_stop_patience} after performance-based chnage last time. Early stopping")
+                break
+
             
     if stage_checkpoint is not None:
         stage_results.append({
