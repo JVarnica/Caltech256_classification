@@ -1,18 +1,18 @@
 import sys
-from unittest.mock import MagicMock, patch
-import unittest
 import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import unittest
+from unittest.mock import MagicMock, patch
 import tempfile
+import importlib
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
-from simple_ft import train_epoch, validate, handle_new_stage, save_results, get_exp_config
-import os
-import tempfile
+from simple_ft.simple_ft import train_epoch, validate, handle_new_stage, save_results, get_exp_config
 
 #Mock configs module import
 sys.modules['configs'] = MagicMock()
-#sys.modules['configs.simple_ft_cal256_config'] = MagicMock()
+sys.modules['configs.simple_ft_cal256_config'] = MagicMock()
 
 class DaliLoaderMock:
     def __init__(self, batch_size, num_batches, num_classes):
@@ -121,13 +121,13 @@ class TestSimpleFT(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(tmpdir, 'test_model_learning_curves.png')))
 
     
-    @patch('simple_ft.importlib.import_module')
+    @patch('importlib.import_module')
     def test_get_exp_config(self, mock_import):
         mock_module = MagicMock()
-        mock_module.SIMPLE_FT_CIFAR100_CONFIG = self.mock_config
+        mock_module.SIMPLE_FT_CALTECH256_CONFIG = self.mock_config
         mock_import.return_value = mock_module
 
-        config = get_exp_config('cifar100')
+        config = get_exp_config('caltech256')
 
         self.assertIsInstance(config, dict)
         self.assertEqual(config, self.mock_config)
