@@ -4,7 +4,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import unittest
 from unittest.mock import MagicMock, patch
 import tempfile
-import importlib
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset

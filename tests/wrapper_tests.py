@@ -49,7 +49,7 @@ class TestTimmWrapper(unittest.TestCase):
                 model_gradual = BaseTimmWrapper(model_name, self.num_classes, freeze_mode='gradual')
                 for name, param in model_gradual.base_model.named_parameters():
                     if not any(head_name in name for head_name in ['fc', 'head']):
-                        self.assertFalse(param.requires_grad, f" In gradual at initial stage {name} should be frozen for {model_name})
+                        self.assertFalse(param.requires_grad, f" In gradual at initial stage {name} should be frozen for {model_name}")
 
         with self.assertRaises(ValueError):
             BaseTimmWrapper(self.models_list[0], self.num_classes, freeze_mode='True') #test invalid input
@@ -67,9 +67,15 @@ class TestTimmWrapper(unittest.TestCase):
                 #Epoch based unfreezing
                 new_stage = model.adaptive_unfreeze(1, 0.5, False)
                 self.assertTrue(new_stage, f"Stage should change at epoch 1 for {model_name}")
-                self.assertEqual(model.unfreeze_state['current_stage'], 1)
-                self.assertTrue(all(p.requires_grad for p in model.param_groups[0]['params']))
-                self.assertFalse(any(p.requires_grad for group in model.param_groups[1:] for p in group['params']))
+                self.assertEqual(model.unfreeze_state['current_stage'], 1, f"Current stage should be 1 after unfreeze")
+                self.assertTrue(all(p.requires_grad for p in model.param_groups[0]['params']),
+                                f"First param group should be unfrozen now for {model_name}")
+                self.assertFalse(any(p.requires_grad for group in model.param_groups[1:] for p in group['params']),
+                                 f"Later param groups should remain frozen after first unfreeze {model_name}")
+                
+                #No unfreezing should occur rndm epoch
+                new_stage = model.adaptive_unfreeze(2, 0.6, False)
+                self.assertFalse()
 
 
     
