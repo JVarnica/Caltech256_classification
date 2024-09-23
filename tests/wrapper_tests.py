@@ -75,10 +75,31 @@ class TestTimmWrapper(unittest.TestCase):
                 
                 #No unfreezing should occur rndm epoch
                 new_stage = model.adaptive_unfreeze(2, 0.6, False)
-                self.assertFalse()
+                self.assertFalse(new_stage, f"There should have been no change")
+                self.assertEqual(model.unfreeze_state['current_stage'], 1, f"Current stage should remain 1 {model_name}")
 
+                # patience unfreeze
+                new_stage = model.adaptive_unfreeze(4, 0.7, True)
+                self.assertTrue(new_stage, f"Patience reached stage shoulda chnaged!! {model_name}")
+                self.assertEqual(model.unfreeze_state['current_stage'], 2, F"Current stage should be two after two unfreezes {model_name}")
 
-    
+                model.adaptive_unfreeze(6, 0.8, False)
+                self.assertEqual(model.unfreeze_state['best_performance'], 0.9, f"Best performance should have updated!!")
+
+                #Test if stage history is updated
+                expected_hist = [(1, 'epoch'), (2, 'performance')]
+                self.assertEqual(model.unfreeze_state['stage_history'], expected_hist,
+                                 f"Stage History should match expected history")
+                
+                 # Test no more unfreezing after all stages are unfrozen
+                for _ in range(len(model.param_groups) - model.unfreeze_state['current_stage']):
+                    model.adaptive_unfreeze(8, 0.6, True)
+                final_stage = model.unfreeze_state['current_stage']
+                new_stage = model.adaptive_unfreeze(9, 0.9, True)
+                self.assertFalse(new_stage, f"No new stage should occur after all unfreezing for {model_name}")
+                self.assertEqual(model.unfreeze_state['current_stage'], final_stage, 
+                                 f"Current stage should equal final stage, it can chnage no more stages{model_name}")
+
     def test_full_finetune(self):
         model = BaseTimmWrapper(self.models_list[0], self.num_classes, freeze_mode='gradual')
         result = model.full_finetune()
@@ -86,3 +107,7 @@ class TestTimmWrapper(unittest.TestCase):
         for param in model.parameters():
             self.assertTrue(param.requires_grad)
         self.assertEqual(model.unfreeze_state['current_stage'], model.unfreeze_state['total_stages'])
+
+
+if __name__ == '__main__':
+    unittest.main()
