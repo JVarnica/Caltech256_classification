@@ -91,7 +91,7 @@ def handle_new_stage(model, optimizer, scheduler, stage_best_val_acc, stage_chec
         return optimizer, scheduler, stage_best_val_acc, stage_checkpoint
 
 
-def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_epochs, config):
+def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_epochs, config, callback=None):
     best_val_acc = 0
     stage_best_val_acc = 0
     best_model_state = None

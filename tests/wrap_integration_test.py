@@ -10,12 +10,31 @@ from simple_ft.simple_ft import train_and_evaluate
 
 class MockAdamW(torch.optim.Optimizer): #Mock object doesn't mock optimizer properly
     def __init__(self, params, lr=0.001, betas=(0.9, 0.999), eps=1e-8, weight_decay=1e-3, amsgrad=False):
-        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay,
-                        amsgrad=amsgrad)
-        super(MockAdamW, self).__init__(params, defaults)
+       defaults = dict(lr = lr, betas = betas, eps = eps, weight_decay = weight_decay, amsgrad = amsgrad)
+       self.param_groups = [{'params': params, **defaults}]
+    
+    def __call__(self, *args, **kwargs):
+        return self
     
     def step(self, closure=None):
-        pass
+        loss = None
+        if closure is not None:
+            loss = closure()
+        return loss
+    
+    def zero_grad(self):
+        for group in self.param_groups:
+            for p in group['params']:
+                if p.grad is not None:
+                    p.grad.detach_()
+                    p.grad.zero_()
+    
+    def state_dict(self):
+        return {'state': {}, 'param_groups': self.param_groups}
+    
+    def load_state_dict(self, state_dict):
+        self.__setstate__(state_dict)
+     
 
 class TestEarlyStopping(unittest.TestCase):
     def setUp(self):
@@ -45,6 +64,7 @@ class TestEarlyStopping(unittest.TestCase):
     @patch('simple_ft.simple_ft.handle_new_stage')
     @patch('torch.optim.AdamW', MockAdamW)
     @patch('torch.optim.lr_scheduler.ReduceLROnPlateau', autospec=True)
+    # Simulate early stopping. 1 stage change, 2nd needs to break not change.
     def test_early_stopping(self, mock_scheduler, mock_handle_new_stage, mock_validate, mock_train_epoch):
         
         mock_train_epoch.return_value = [0.5, 80.0]
@@ -64,13 +84,12 @@ class TestEarlyStopping(unittest.TestCase):
         ]
         self.model.unfreeze_state = {'stage_history': [], 'current_stage': 0}
 
-        mock_optimizer = MockAdamW(self.model.get_trainable_params())
         mock_scheduler_instance = MagicMock()
         mock_scheduler.return_value = mock_scheduler_instance
 
         def side_effect_handle_new_stage(*args, **kwargs):
             self.model.unfreeze_state['stage_history'].append((1, 'performance'))
-            return (mock_optimizer, mock_scheduler_instance, 0, None)
+            return (MockAdamW(self.model.get_trainable_params(), self.config['learning_rate'], weight_decay=self.config['weight_decay']), mock_scheduler_instance, 0, None)
         
         mock_handle_new_stage.side_effect = side_effect_handle_new_stage
 
@@ -78,6 +97,7 @@ class TestEarlyStopping(unittest.TestCase):
                                      self.config['num_epochs'], self.config)
         
         self.assertEqual(len(results['val_accs']), 15)
+        self.assertEqual(self.model.unfreeze_state['current_stage', 1])
         self.model.adaptive_unfreeze.assert_any_call(7, self.config['num_epochs'], 83.0, True)
         mock_handle_new_stage.assert_called_once()
         self.assertEqual(self.model.unfreeze_state['stage_history'], [(1, 'performance')])
