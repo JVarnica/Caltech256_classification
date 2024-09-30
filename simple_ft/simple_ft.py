@@ -106,15 +106,18 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
     scheduler_patience = config['scheduler_patience']
     
 
-    optimizer = AdamW(model.get_trainable_params(), lr, weight_decay)
+    optimizer = AdamW(model.get_trainable_params(), lr=lr, weight_decay=weight_decay, betas=(0.9, 0.999))
     scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=scheduler_patience, verbose=True)
 
     start_time = time.time()
 
     for epoch in range(num_epochs):
         epoch_start_time = time.time()
+
+        if callback:
+            callback(epoch, model, optimizer, scheduler, train_loss, train_acc, val_loss, val_acc)
        
-        new_stage  = model.adaptive_unfreeze(epoch, num_epochs, best_val_acc, False)
+        new_stage  = model.adaptive_unfreeze(epoch, best_val_acc, False)
         if new_stage:
             logging.info(f"Epoch {epoch+1}: Scheduled stage transition")
             optimizer, scheduler, stage_best_val_acc, stage_checkpoint = handle_new_stage(
@@ -140,7 +143,7 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
 
         if val_acc > best_val_acc + min_improvement:
             best_val_acc = val_acc
-            stage_checkpoint = model.state_dict().copy()
+            best_model_checkpoint = model.state_dict().copy()
             epochs_no_improve = 0
         else:
             epochs_no_improve += 1
@@ -157,10 +160,10 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
         #Logic of early stopping
 
         if epochs_no_improve >= early_stop_patience:
-            if not model.unfreeze_state['stage_history'] or  model.unfreeze_state['stage_history'][-1][1] != 'performance': #empty OR performance
-                new_stage = model.adaptive_unfreeze(epoch, num_epochs, best_val_acc, True)
+            if not model.unfreeze_state['stage_history'] or  model.unfreeze_state['stage_history'][-1][1] != 'performance': #empty OR epoch CONTINUE
+                new_stage = model.adaptive_unfreeze(epoch, best_val_acc, True)
                 if new_stage:
-                    logging.info(f"No improv for {early_stop_patience} epochs. Moving to next stage as history flag good")
+                    logging.info(f"No improv for {early_stop_patience} epochs. Moving to next stage {model.unfreeze_state['current_stage']}")
                     optimizer, scheduler, stage_best_val_acc, stage_checkpoint = handle_new_stage(
                         model, optimizer, scheduler, stage_best_val_acc, stage_checkpoint, stage_results,
                         epoch, lr, weight_decay, scheduler_patience
@@ -172,7 +175,6 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
             else:
                 logging.info(f"No Improvement for {early_stop_patience} after performance-based chnage last time. Early stopping")
                 break
-
             
     if stage_checkpoint is not None:
         stage_results.append({
@@ -186,7 +188,7 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
     total_time = time.time() - start_time()
     logging.info(f"{model.model_name} total training time: {total_time:.4f} seconds")
 
-    if best_model_state is not None:
+    if best_model_checkpoint is not None:
         model.load_state_dict(best_model_state)
 
     return {
