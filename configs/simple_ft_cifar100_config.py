@@ -29,10 +29,9 @@ SIMPLE_FT_CIFAR100_CONFIG = {
     'batch_size': 512,
     'num_threads': 8,
     'num_epochs': 50,
-    'learning_rate': 1e-4,
+    'stage_lrs': [1e-3, 1e-4, 5e-5, 1e-5, 1e-6], 
     'weight_decay': 1e-5,
     'early_stop_patience': 10,
-    'scheduler_patience': 5,
     'min_improvement': 0.001
     
 }

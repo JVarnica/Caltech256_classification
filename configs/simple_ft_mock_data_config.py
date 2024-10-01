@@ -29,9 +29,8 @@ SIMPLE_MOCK_DATA_CONFIG = {
     'num_threads': 8,
     'num_epochs': 2,
     'num_classes': 100, 
-    'learning_rate': 1e-4,
+    'stage_lrs': [1e-3, 1e-4, 5e-5, 1e-5, 1e-6], 
     'weight_decay': 1e-5,
-    'early_stop_patience': 1,
-    'scheduler_patience': 1,
+    'early_stop_patience': 3,
     'min_improvement': 0.001
 }
