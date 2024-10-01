@@ -74,30 +74,10 @@ def validate(model, val_loader, criterion, device):
 
     return avg_loss, accuracy
 
-def handle_new_stage(model, optimizer, scheduler, stage_best_val_acc, stage_checkpoint, stage_results, epoch, lr, weight_decay, scheduler_patience):
-        if stage_checkpoint is not None:
-            stage_results.append({
-                'stage': model.unfreeze_state['current_stage'] - 1,
-                'val_acc': stage_best_val_acc,
-                'model_state': stage_checkpoint,
-                'epoch': epoch - 1
-            })
-            logging.info(f"Saved optimal results/model for stage{model.unfreeze_state['current_stage']-1}")
-
-        stage_best_val_acc = 0
-        stage_checkpoint = None
-        optimizer = AdamW(model.get_trainable_params(), lr=lr, weight_decay=weight_decay)
-        scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=scheduler_patience, verbose=True)
-        return optimizer, scheduler, stage_best_val_acc, stage_checkpoint
-
-
 def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_epochs, config, callback=None):
     best_val_acc = 0
-    stage_best_val_acc = 0
-    best_model_state = None
-    stage_checkpoint = None
+    model_checkpoint = None
     train_losses, train_accs, val_losses, val_accs, epoch_times = [], [], [], [], []
-    stage_results = []
     epochs_no_improve = 0
     lr = config['learning_rate']
     weight_decay = config['weight_decay']
@@ -113,17 +93,14 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
 
     for epoch in range(num_epochs):
         epoch_start_time = time.time()
-
-        if callback:
-            callback(epoch, model, optimizer, scheduler, train_loss, train_acc, val_loss, val_acc)
        
+       # For epoch unfreeze
         new_stage  = model.adaptive_unfreeze(epoch, best_val_acc, False)
         if new_stage:
-            logging.info(f"Epoch {epoch+1}: Scheduled stage transition")
-            optimizer, scheduler, stage_best_val_acc, stage_checkpoint = handle_new_stage(
-                model, optimizer, scheduler, stage_best_val_acc, stage_checkpoint, stage_results,
-                epoch, lr, weight_decay, scheduler_patience
-            )
+
+            logging.info(f"Epoch {epoch+1}: Scheduled stage transition to {model.unfreeze_state['current_stage']}")
+            optimizer = AdamW(model.get_trainable_params(), lr=lr, weight_decay=weight_decay)
+            scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=scheduler_patience, verbose=True)
             epochs_no_improve = 0
         
         model.train()
@@ -143,15 +120,10 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
 
         if val_acc > best_val_acc + min_improvement:
             best_val_acc = val_acc
-            best_model_checkpoint = model.state_dict().copy()
+            model_checkpoint = model.state_dict().copy()
             epochs_no_improve = 0
         else:
             epochs_no_improve += 1
-
-        if val_acc > stage_best_val_acc:
-            stage_best_val_acc = val_acc
-            stage_checkpoint = model.state_dict().copy()
-        
 
         logging.info(f'Epoch {epoch+1}/{num_epochs}, Epoch Time: {epoch_time:2f}s, '
                      f'Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, '
@@ -159,37 +131,29 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
 
         #Logic of early stopping
 
+        if callback:
+            callback(epoch, model, optimizer, scheduler, train_loss, train_acc, val_loss, val_acc)
+
         if epochs_no_improve >= early_stop_patience:
             if not model.unfreeze_state['stage_history'] or  model.unfreeze_state['stage_history'][-1][1] != 'performance': #empty OR epoch CONTINUE
                 new_stage = model.adaptive_unfreeze(epoch, best_val_acc, True)
                 if new_stage:
-                    logging.info(f"No improv for {early_stop_patience} epochs. Moving to next stage {model.unfreeze_state['current_stage']}")
-                    optimizer, scheduler, stage_best_val_acc, stage_checkpoint = handle_new_stage(
-                        model, optimizer, scheduler, stage_best_val_acc, stage_checkpoint, stage_results,
-                        epoch, lr, weight_decay, scheduler_patience
-                    )
+                    logging.info(f"No improv for {early_stop_patience} epochs. Moving to stage {model.unfreeze_state['current_stage']}")
+                    optimizer = AdamW(model.get_trainable_params(), lr=lr, weight_decay=weight_decay)
+                    scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=scheduler_patience, verbose=True)
                     epochs_no_improve = 0
                 else:
                     logging.info(f"No more stages available. Early Stopping")
                     break
             else:
-                logging.info(f"No Improvement for {early_stop_patience} after performance-based chnage last time. Early stopping")
+                logging.info(f"No Improvement for {early_stop_patience} epochs, after performance-based change last time. Early stopping")
                 break
-            
-    if stage_checkpoint is not None:
-        stage_results.append({
-            'stage': model.unfreeze_state['current_stage'],
-            'val_acc': stage_best_val_acc,
-            'model_state': stage_checkpoint,
-            'epoch': epoch
-        })
-        logging.info(f"Saved final stage checkpoint, {model.unfreeze_state['current_stage']}")
 
-    total_time = time.time() - start_time()
+    total_time = time.time() - start_time
     logging.info(f"{model.model_name} total training time: {total_time:.4f} seconds")
 
-    if best_model_checkpoint is not None:
-        model.load_state_dict(best_model_state)
+    if model_checkpoint is not None:
+        model.load_state_dict(model_checkpoint)
 
     return {
         'train_losses':train_losses, 
@@ -199,8 +163,7 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
         'best_val_acc': best_val_acc, 
         'epoch_times': epoch_times, 
         'total_time': total_time, 
-        'stage_results': stage_results,
-        'best_model_state': best_model_state
+        'best_model_state': model_checkpoint
     }
 
 def save_results(result, results_dir, model_name):
@@ -263,19 +226,10 @@ def run_experiment(config, model_name):
     
     base_dir = os.path.dirname(os.path.dirname(config['results_dir']))
     models_dir = os.path.join(base_dir, 'models')
-    spef_model_dir = os.path.join(models_dir, model_name)
-    os.makedirs(spef_model_dir, exist_ok=True)
 
-    best_model_path = os.path.join(spef_model_dir,  f'{config["model_name"]}_overall_best.pth')
+    best_model_path = os.path.join(models_dir,  f'{config["model_name"]}_overall_best.pth')
     torch.save(results['best_model_state'], best_model_path)
     logging.info(f"Saved best {model_name} to {best_model_path}")
-
-    #  Save stage-wise best models and print results
-    for stage_result in results['stage_results']:
-        stage_best_path = os.path.join(spef_model_dir, f'{config["dataset_name"]}_stage_{stage_result["stage"]}_best.pth')
-        torch.save(stage_result['model_state'], stage_best_path)
-        logging.info(f"Stage {stage_result['stage']} Best Val Acc: {stage_result['val_acc']:.4f} "
-                     f"(Epoch {stage_result['epoch']}), Saved to {stage_best_path} ")
     
     # Save results
     save_results(results, config['results_dir'], model_name)

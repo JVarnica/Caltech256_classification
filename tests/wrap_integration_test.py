@@ -43,11 +43,10 @@ class TestEarlyStopping(unittest.TestCase):
         }
     @patch('simple_ft.simple_ft.train_epoch')
     @patch('simple_ft.simple_ft.validate')
-    @patch('simple_ft.simple_ft.handle_new_stage')
     @patch('torch.optim.AdamW')
     @patch('torch.optim.lr_scheduler.ReduceLROnPlateau', autospec=True)
     # Simulate early stopping. 1 stage change, 2nd needs to break not change.
-    def test_early_stopping(self, mock_scheduler, mock_optimizer, mock_handle_new_stage, mock_validate, mock_train_epoch):
+    def test_early_stopping(self, mock_scheduler, mock_optimizer, mock_validate, mock_train_epoch):
         
         mock_train_epoch.return_value = (0.5, 80.0)
         val_losses = [0.4, 0.39, 0.38, 0.38, 0.38, 0.38, 0.38, 0.38, 0.37, 0.34, 0.33, 0.37, 0.37, 0.38, 0.35, 0.35]
@@ -70,16 +69,14 @@ class TestEarlyStopping(unittest.TestCase):
         self.model.adaptive_unfreeze.side_effect = adaptive_unfreeze_side_effect
           
         self.model.unfreeze_state = {'stage_history': [], 'current_stage': 0}
-        mock_handle_new_stage.return_value = (mock_optimizer.return_value, mock_scheduler.return_value, 0, None)
 
         results = train_and_evaluate(self.model, MagicMock(), MagicMock(), self.criterion, self.device,
                                      self.config['num_epochs'], self.config, callback=mock_callback)
         
         self.assertEqual(len(results['val_accs']), 16)
         # Check if stage transitions occurred correctly
-        expected_stages = [(1, 'epoch'), (2, 'epoch'), (3, 'performance'), (4, 'performance')]
+        expected_stages = [(1, 'epoch'), (2, 'epoch'), (3, 'performance')]
         self.assertEqual(self.model.unfreeze_state['stage_history'], expected_stages)
-        self.assertEqual(mock_handle_new_stage.call_count, 4)
 
         self.assertEqual(len(mock_callback.calls), 16)
         for i, call in enumerate(mock_callback.calls):
