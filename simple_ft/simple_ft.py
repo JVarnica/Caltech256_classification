@@ -79,15 +79,12 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
     model_checkpoint = None
     train_losses, train_accs, val_losses, val_accs, epoch_times = [], [], [], [], []
     epochs_no_improve = 0
-    lr = config['learning_rate']
     weight_decay = config['weight_decay']
     min_improvement = config['min_improvement'] 
     early_stop_patience= config['early_stop_patience']
-    scheduler_patience = config['scheduler_patience']
     
 
-    optimizer = AdamW(model.get_trainable_params(), lr=lr, weight_decay=weight_decay, betas=(0.9, 0.999))
-    scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=scheduler_patience, verbose=True)
+    optimizer = AdamW(model.get_trainable_params(), lr=config['stage_lrs'][0], weight_decay=weight_decay, betas=(0.9, 0.999))
 
     start_time = time.time()
 
@@ -95,21 +92,19 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
         epoch_start_time = time.time()
        
        # For epoch unfreeze
-        new_stage  = model.adaptive_unfreeze(epoch, best_val_acc, False)
+        new_stage  = model.adaptive_unfreeze(epoch, False)
         if new_stage:
-
-            logging.info(f"Epoch {epoch+1}: Scheduled stage transition to {model.unfreeze_state['current_stage']}")
-            optimizer = AdamW(model.get_trainable_params(), lr=lr, weight_decay=weight_decay)
-            scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=scheduler_patience, verbose=True)
+            current_stage = model.unfreeze_state['current_stage']
+            new_lr = config['stage_lrs'][current_stage]
+            optimizer = AdamW(model.get_trainable_params(), lr=new_lr, weight_decay=weight_decay, betas=(0.9, 0.999))
             epochs_no_improve = 0
+            logging.info(f"Epoch {epoch+1}: Transition to stage {current_stage}, with learning rate of {new_lr}")
         
         model.train()
         train_loss, train_acc = train_epoch(model, train_loader, optimizer, criterion, device)
 
         model.eval()
         val_loss, val_acc = validate(model, val_loader, criterion, device)
-
-        scheduler.step(val_acc)
 
         epoch_time = time.time() - epoch_start_time
         train_losses.append(train_loss)
@@ -132,16 +127,17 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
         #Logic of early stopping
 
         if callback:
-            callback(epoch, model, optimizer, scheduler, train_loss, train_acc, val_loss, val_acc)
+            callback(epoch, model, train_loss, train_acc, val_loss, val_acc)
 
         if epochs_no_improve >= early_stop_patience:
             if not model.unfreeze_state['stage_history'] or  model.unfreeze_state['stage_history'][-1][1] != 'performance': #empty OR epoch CONTINUE
-                new_stage = model.adaptive_unfreeze(epoch, best_val_acc, True)
+                new_stage = model.adaptive_unfreeze(epoch, True)
                 if new_stage:
-                    logging.info(f"No improv for {early_stop_patience} epochs. Moving to stage {model.unfreeze_state['current_stage']}")
-                    optimizer = AdamW(model.get_trainable_params(), lr=lr, weight_decay=weight_decay)
-                    scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=scheduler_patience, verbose=True)
+                    current_stage = model.unfreeze_state['current_stage']
+                    new_lr = config['stage_lrs'][current_stage]
+                    optimizer = AdamW(model.get_trainable_params(), lr=new_lr, weight_decay=weight_decay, betas=(0.9, 0.999))
                     epochs_no_improve = 0
+                    logging.info(f"No improv for {early_stop_patience} epochs. Moving to stage {current_stage}, with learning rate: {new_lr}")
                 else:
                     logging.info(f"No more stages available. Early Stopping")
                     break
