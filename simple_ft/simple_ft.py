@@ -127,7 +127,7 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
         #Logic of early stopping
 
         if callback:
-            callback(epoch, model, train_loss, train_acc, val_loss, val_acc)
+            callback(epoch, model, optimizer, train_loss, train_acc, val_loss, val_acc)
 
         if epochs_no_improve >= early_stop_patience:
             if not model.unfreeze_state['stage_history'] or  model.unfreeze_state['stage_history'][-1][1] != 'performance': #empty OR epoch CONTINUE

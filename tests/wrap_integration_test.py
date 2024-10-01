@@ -12,16 +12,16 @@ class MockCallback:
     def __init__(self):
         self.calls = []
     
-    def __call__(self, epoch, model, optimizer, scheduler, train_loss, train_acc, val_loss, val_acc):
+    def __call__(self, epoch, model, optimizer ,train_loss, train_acc, val_loss, val_acc):
         self.calls.append({
             'epoch': epoch,
+            'model_stage': model.unfreeze_state['current_stage'],
             'optimizer': optimizer,
-            'scheduler': scheduler,
             'train_loss': train_loss,
             'train_acc': train_acc,
             'val_loss': val_loss,
             'val_acc': val_acc,
-            'model_stage': model.unfreeze_state['current_stage']
+            'lr': optimizer.param_groups[0]['lr']
         })
 
 class TestEarlyStopping(unittest.TestCase):
@@ -36,17 +36,15 @@ class TestEarlyStopping(unittest.TestCase):
             'num_epochs': 20,
             'early_stop_patience': 5,
             'min_improvement': 0.001,
-            'learning_rate': 0.001,
+            'stage_lrs': [0.001, 0.0005, 0.0001, 0.00001],
             'weight_decay': 1e-5,
-            'scheduler_patience': 3,
-            'unfreeze_epochs': [1, 4]
+            'unfreeze_epochs': [2, 4]
         }
     @patch('simple_ft.simple_ft.train_epoch')
     @patch('simple_ft.simple_ft.validate')
     @patch('torch.optim.AdamW')
-    @patch('torch.optim.lr_scheduler.ReduceLROnPlateau', autospec=True)
     # Simulate early stopping. 1 stage change, 2nd needs to break not change.
-    def test_early_stopping(self, mock_scheduler, mock_optimizer, mock_validate, mock_train_epoch):
+    def test_early_stopping(self, mock_AdamW, mock_validate, mock_train_epoch):
         
         mock_train_epoch.return_value = (0.5, 80.0)
         val_losses = [0.4, 0.39, 0.38, 0.38, 0.38, 0.38, 0.38, 0.38, 0.37, 0.34, 0.33, 0.37, 0.37, 0.38, 0.35, 0.35]
@@ -55,7 +53,13 @@ class TestEarlyStopping(unittest.TestCase):
         mock_validate.side_effect = list(zip(val_losses, val_accs))
         mock_callback = MockCallback()
 
-        def adaptive_unfreeze_side_effect(epoch, performance_metric, patience_reached=False):
+        class DynamicMockOptimizer:
+            def __init__(self, *args, **kwargs):
+                self.param_groups = [{'lr': kwargs['lr']}]
+
+        mock_AdamW.side_effect = DynamicMockOptimizer
+
+        def adaptive_unfreeze_side_effect(epoch, patience_reached=False):
             if patience_reached:
                 self.model.unfreeze_state['stage_history'].append((self.model.unfreeze_state['current_stage'] + 1, 'performance'))
                 self.model.unfreeze_state['current_stage'] += 1
@@ -77,14 +81,25 @@ class TestEarlyStopping(unittest.TestCase):
         # Check if stage transitions occurred correctly
         expected_stages = [(1, 'epoch'), (2, 'epoch'), (3, 'performance')]
         self.assertEqual(self.model.unfreeze_state['stage_history'], expected_stages)
-
         self.assertEqual(len(mock_callback.calls), 16)
+
         for i, call in enumerate(mock_callback.calls):
             self.assertEqual(call['epoch'], i)
             self.assertEqual(call['train_loss'], 0.5)
             self.assertEqual(call['train_acc'], 80.0)
             self.assertEqual(call['val_loss'], val_losses[i])
             self.assertEqual(call['val_acc'], val_accs[i])
+
+            if i < 2:
+                self.assertEqual(call['lr'], self.config['stage_lrs'][0])
+            if i == 2:
+                self.assertEqual(call['lr'], self.config['stage_lrs'][1])
+            elif i == 4:
+                self.assertEqual(call['lr'], self.config['stage_lrs'][2])
+            elif i == 9: 
+                self.assertEqual(call['lr'], self.config['stage_lrs'][3])
+            elif i > 9:
+                self.assertEqual(call['lr'], self.config['stage_lrs'][3])
 
 if __name__ == '__main__':
     unittest.main()
