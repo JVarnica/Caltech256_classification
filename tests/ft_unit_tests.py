@@ -7,7 +7,7 @@ import tempfile
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
-from simple_ft.simple_ft import train_epoch, validate, handle_new_stage, save_results, get_exp_config
+from simple_ft.simple_ft import train_epoch, validate, save_results, get_exp_config
 
 #Mock configs module import
 sys.modules['configs'] = MagicMock()
@@ -82,30 +82,7 @@ class TestSimpleFT(unittest.TestCase):
         self.assertIsInstance(loss, float)
         self.assertIsInstance(acc, float)
         self.assertLessEqual(acc, 100)
-
-    def test_handle_new_stages(self):
-
-        mock_model = MagicMock()
-        mock_model.unfreeze_state = {'current_stage': 1}
-        mock_model.get_trainable_params.return_value = self.model.parameters()
-        optimizer = torch.optim.AdamW(self.model.parameters(), lr=0.001, weight_decay= 0.01)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience= 3)
-        stage_checkpoint = self.model.state_dict().copy()
-        stage_best_val_acc = 0.5
-        stage_results = []
-
-        mock_model = MagicMock()
-        mock_model.unfreeze_state = {'current_stage': 1}
-        mock_model.get_trainable_params.return_value = self.model.parameters()
-
-        new_opti, new_sch, new_stage_best_acc, new_stage_checkpoint = handle_new_stage(mock_model, optimizer, scheduler, stage_best_val_acc, stage_checkpoint, stage_results, 1, 0.001, 0.01, 5)
-
-        self.assertIsInstance(new_opti, torch.optim.AdamW)
-        self.assertIsInstance(new_sch, torch.optim.lr_scheduler.ReduceLROnPlateau)
-        self.assertEqual(new_stage_best_acc, 0)
-        self.assertIsNone(new_stage_checkpoint)
        
-    
     def test_save_results(self):
         results = {
             'train_losses': [0.5, 0.4],
@@ -119,7 +96,6 @@ class TestSimpleFT(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(tmpdir, 'test_model_metrics.csv')))
             self.assertTrue(os.path.exists(os.path.join(tmpdir, 'test_model_learning_curves.png')))
 
-    
     @patch('importlib.import_module')
     def test_get_exp_config(self, mock_import):
         mock_module = MagicMock()

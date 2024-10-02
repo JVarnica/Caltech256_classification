@@ -199,13 +199,16 @@ def save_results(result, results_dir, model_name):
 
 def run_experiment(config, model_name):
 
+    logging.info("Config received in run_experiment:", config)
+    logging.info("Model name received in run_experiment:", model_name)
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     print(f"Running experiment for {model_name}")
 
     BaseTimmWrapper = get_base_model()
-    model = BaseTimmWrapper(config['model_name'], config['num_classes'], 
-                            freeze_mode=config['freeze_mode'], unfreeze_epochs=config['unfreeze_epochs'])
+    model = BaseTimmWrapper(model_name, config['num_classes'], 
+                            freeze_mode=config.get('freeze_mode'), unfreeze_epochs=config.get('unfreeze_epochs'))
     model = model.to(device)
     
     criterion = nn.CrossEntropyLoss()

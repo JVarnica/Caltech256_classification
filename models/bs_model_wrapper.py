@@ -48,6 +48,9 @@ class BaseTimmWrapper(nn.Module):
             raise ValueError(f"Unsupported {self.model_name}")
         
     def set_base_model_state(self, freeze_mode):
+        if freeze_mode is None:
+            freeze_mode = 'none'
+        
         if freeze_mode == 'full' or freeze_mode == 'gradual':
             self.base_model.eval()
             for name, param in self.base_model.named_parameters():
@@ -68,13 +71,13 @@ class BaseTimmWrapper(nn.Module):
 
     def get_param_groups(self):
         if 'resnet50' in self.model_name:
-            return self.get_resnet50_params(self.base_model)
+            return self.get_resnet50_params()
         elif 'vit_base' in self.model_name:
-            return self.get_vit_params(self.base_model)
+            return self.get_vit_params()
         elif 'pvt_v2' in self.model_name:
-            return self.get_pvt_params(self.base_model)
+            return self.get_pvt_params()
         elif 'regnety' in self.model_name:
-            return self.get_regnety_params(self.base_model)
+            return self.get_regnety_params()
         else:
             return [{'params' : self.parameters()}]
     

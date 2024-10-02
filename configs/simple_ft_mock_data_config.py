@@ -1,4 +1,4 @@
-SIMPLE_MOCK_DATA_CONFIG = {
+SIMPLE_FT_MOCK_DATA_CONFIG = {
     'model_list' : [
            {
             'model_name': 'resnet50.a1_in1k', 
@@ -25,10 +25,10 @@ SIMPLE_MOCK_DATA_CONFIG = {
     'train_dir': '/content/drive/MyDrive/caltech_proj/data/Caltech256/mock_data/train',
     'val_dir': '/content/drive/MyDrive/caltech_proj/data/Caltech256/mock_data/val',
     'results_dir': '/content/drive/MyDrive/caltech_proj/caltech_proj/simple_ft/sft_mock_results',
-    'batch_size': 256,
+    'batch_size': 128,
     'num_threads': 8,
     'num_epochs': 2,
-    'num_classes': 100, 
+    'num_classes': 256, # caltech mock_data
     'stage_lrs': [1e-3, 1e-4, 5e-5, 1e-5, 1e-6], 
     'weight_decay': 1e-5,
     'early_stop_patience': 3,
