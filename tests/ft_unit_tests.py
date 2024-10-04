@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import tempfile
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, Dataset
+import csv
 from simple_ft.simple_ft import train_epoch, validate, save_results, get_exp_config
 
 #Mock configs module import
@@ -57,7 +57,6 @@ class TestSimpleFT(unittest.TestCase):
             'learning_rate': 0.01,
             'weight_decay': 0.001,
             'early_stop_patience': 5,
-            'scheduler_patience': 3,
             'min_improvement': 0.001
         }
 
@@ -66,22 +65,42 @@ class TestSimpleFT(unittest.TestCase):
         self.model = MockModel(self.num_classes).to(self.device)
         self.batch_size = self.mock_config['batch_size']
         self.num_batches = 5
+        self.num_epochs = self.mock_config['num_epochs']
         self.train_loader = DaliLoaderMock(self.batch_size, self.num_batches, self.num_classes)
         self.val_loader = DaliLoaderMock(self.batch_size, self.num_batches, self.num_classes)
         self.criterion = nn.CrossEntropyLoss()
 
     def test_train_epoch(self):
         optimizer = torch.optim.AdamW(self.model.parameters())
-        loss, acc = train_epoch(self.model, self.train_loader, optimizer, self.criterion, self.device)
-        self.assertIsInstance(loss, float)
-        self.assertIsInstance(acc, float)
-        self.assertLessEqual(acc, 100)
+        losses = []
+        accuracies = []
+        for epoch in range(self.num_epochs):
+            avg_loss, acc = train_epoch(self.model, self.train_loader, optimizer, self.criterion, self.device)
+            self.assertIsInstance(avg_loss, float)
+            self.assertIsInstance(acc, float)
+            assert 0 <= avg_loss <= 10, f"Loss {avg_loss} is out of expected range"
+            assert 0 <= acc <= 100, f"Accuracy {acc} is out of expected range"
+            # Check for decreasing loss/ up acc
+            losses.append(avg_loss)
+            accuracies.append(acc)
+            if epoch > 2:
+                self.assertLess(avg_loss, losses[epoch-1] + 1e-5, f"Loss aint decreasing!!!")
+            if epoch > 2:
+                self.assertGreater(acc, accuracies[-1] - 1e-5, f"Accuraccy not increasing {acc}")
+        self.assertLess(losses[-1], losses[0], f"Loss didnt decrease overall. Initial {losses[0]}, final {losses[-1]}")
     
     def test_validate(self):
-        loss, acc = validate(self.model, self.val_loader, self.criterion, self.device)
-        self.assertIsInstance(loss, float)
-        self.assertIsInstance(acc, float)
-        self.assertLessEqual(acc, 100)
+        accuracies = []
+        for epoch in range(self.num_epochs):
+            loss, acc = validate(self.model, self.val_loader, self.criterion, self.device)
+            self.assertIsInstance(loss, float)
+            self.assertIsInstance(acc, float)
+            self.assertLessEqual(acc, 100)
+
+            accuracies.append(acc)
+            if epoch > 2:
+                self.assertGreater(acc, accuracies[-1] - 1e-5, f"Accuarcy is not increasing!!")
+        self.assertGreater(accuracies[-1], accuracies[0], f"Accuarccy ddint decrease overall 1: {accuracies[-1]}, final: {accuracies[-1]}")
        
     def test_save_results(self):
         results = {
@@ -95,6 +114,14 @@ class TestSimpleFT(unittest.TestCase):
             save_results(results, tmpdir, 'test_model')
             self.assertTrue(os.path.exists(os.path.join(tmpdir, 'test_model_metrics.csv')))
             self.assertTrue(os.path.exists(os.path.join(tmpdir, 'test_model_learning_curves.png')))
+            # check content of csv
+            with open(os.path.join(tmpdir, 'test_model_metrics.csv'), 'r') as f:
+                reader = csv.reader(f)
+                rows = list(reader)
+                self.assertequal(len(rows), 3) 
+                self.assertEqual(rows[0], ['Epoch', 'Train_Loss', 'Train_Acc', 'Val Loss', 'Val Acc', 'Epoch Time'])
+                self.assertEqual(rows[1], ['1', '0.5', '80', '0.6', '75', '10'])
+
 
     @patch('importlib.import_module')
     def test_get_exp_config(self, mock_import):
@@ -107,7 +134,6 @@ class TestSimpleFT(unittest.TestCase):
         self.assertIsInstance(config, dict)
         self.assertEqual(config, self.mock_config)
        
-
 if __name__ == '__main__':
     print("Startign unittest main")
     unittest.main()

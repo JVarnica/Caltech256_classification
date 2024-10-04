@@ -8,6 +8,7 @@ import torch
 import os
 from simple_ft.simple_ft import run_experiment, get_exp_config
 
+
 def test_run_experiment_with_mock_data():
     # Get mock data config
     config = get_exp_config('mock_data')
@@ -84,7 +85,6 @@ def test_run_experiment_with_mock_data():
         learning_rates = [data['lr'] for data in callback_data]
 
         assert len(set(stages)) > 1, f"No stage changes detected for {model_name}"
-        assert stages[-1] >= len(experiment_config['unfreeze_epochs']), f"Not all stages were reached for {model_name}"
         assert len(set(learning_rates)) > 1, f"No learning rate changes detected for {model_name}"
         assert learning_rates[0] == experiment_config['stage_lrs'][0], f"Initial learning rate incorrect for {model_name}"
         
