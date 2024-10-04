@@ -15,7 +15,6 @@ class BaseTimmWrapper(nn.Module):
         self.head_epochs = head_epochs
         self.stage_epochs = stage_epochs
         self.epochs_in_current_stage = 0
-        self.total_epochs = 0
 
         self.setup_classifier(num_classes)
         self.set_base_model_state(freeze_mode)
