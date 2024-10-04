@@ -82,6 +82,8 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
     weight_decay = config['weight_decay']
     min_improvement = config['min_improvement'] 
     early_stop_patience= config['early_stop_patience']
+    head_epochs = config['head_epochs']
+    stage_epochs = config['stage_epochs']
     
 
     optimizer = AdamW(model.get_trainable_params(), lr=config['stage_lrs'][0], weight_decay=weight_decay, betas=(0.9, 0.999))
@@ -92,7 +94,7 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
         epoch_start_time = time.time()
        
        # For epoch unfreeze
-        new_stage  = model.adaptive_unfreeze(epoch, False)
+        new_stage  = model.adaptive_unfreeze(patience_reached = False)
         if new_stage:
             current_stage = model.unfreeze_state['current_stage']
             new_lr = config['stage_lrs'][current_stage]
@@ -131,7 +133,7 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
 
         if epochs_no_improve >= early_stop_patience:
             if not model.unfreeze_state['stage_history'] or  model.unfreeze_state['stage_history'][-1][1] != 'performance': #empty OR epoch CONTINUE
-                new_stage = model.adaptive_unfreeze(epoch, True)
+                new_stage = model.adaptive_unfreeze(True)
                 if new_stage:
                     current_stage = model.unfreeze_state['current_stage']
                     new_lr = config['stage_lrs'][current_stage]
@@ -208,7 +210,7 @@ def run_experiment(config, model_name):
 
     BaseTimmWrapper = get_base_model()
     model = BaseTimmWrapper(model_name, config['num_classes'], 
-                            freeze_mode=config.get('freeze_mode'), unfreeze_epochs=config.get('unfreeze_epochs'))
+                            freeze_mode=config.get('freeze_mode'), head_epochs=config['head_epochs'], stage_epochs=config['stage_epochs'])
     model = model.to(device)
     
     criterion = nn.CrossEntropyLoss()

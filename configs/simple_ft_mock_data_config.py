@@ -3,22 +3,18 @@ SIMPLE_FT_MOCK_DATA_CONFIG = {
            {
             'model_name': 'resnet50.a1_in1k', 
             'freeze_mode': 'gradual',
-          'unfreeze_epochs': [0, 1]
         },
         {
             'model_name': 'regnety_040.pycls_in1k', 
             'freeze_mode': 'gradual',
-            'unfreeze_epochs': [0, 1]
         },
         {
             'model_name': 'pvt_v2_b3.in1k', 
             'freeze_mode': 'gradual',
-            'unfreeze_epochs': [0, 1]
         },
         {
             'model_name': 'vit_base_patch16_224.orig_in21k_ft_in1k', 
             'freeze_mode': 'gradual',
-            'unfreeze_epochs': [0, 1]
         }
     ],
     'dataset_name': 'mock_data',
@@ -29,6 +25,8 @@ SIMPLE_FT_MOCK_DATA_CONFIG = {
     'num_threads': 8,
     'num_epochs': 2,
     'num_classes': 256, # caltech mock_data
+    'head_epochs': 5,
+    'stage_epochs': 10,
     'stage_lrs': [1e-3, 1e-4, 5e-5, 1e-5, 1e-6], 
     'weight_decay': 1e-5,
     'early_stop_patience': 3,

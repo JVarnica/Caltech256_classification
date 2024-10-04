@@ -5,17 +5,23 @@ import timm
 import torch.nn as nn
 
 class BaseTimmWrapper(nn.Module):
-    def __init__(self, model_name, num_classes, freeze_mode='full', unfreeze_epochs=None):
+    def __init__(self, model_name, num_classes, freeze_mode=None, head_epochs=None, stage_epochs=None):
         super().__init__()
         self.base_model = timm.create_model(model_name, pretrained=True, num_classes=num_classes)
         self.data_config = timm.data.resolve_model_data_config(self.base_model)
         self.input_size = self.data_config['input_size'][1:]
         self.model_name = model_name.split('.')[0]
         self.freeze_mode = freeze_mode
+        self.head_epochs = head_epochs
+        self.stage_epochs = stage_epochs
+        self.epochs_in_current_stage = 0
+        self.total_epochs = 0
+
         self.setup_classifier(num_classes)
         self.set_base_model_state(freeze_mode)
         self.param_groups = self.get_param_groups()
-        self.unfreeze_epochs = unfreeze_epochs
+        self.stages = [group['name'] for group in self.param_groups]
+        
         self.unfreeze_state = {
             'current_stage': 0,
             'total_stages': len(self.param_groups),
@@ -138,35 +144,34 @@ class BaseTimmWrapper(nn.Module):
     def get_trainable_params(self):
         return filter(lambda p: p.requires_grad, self.base_model.parameters())
     
-    def _transition_to_new_stage(self, current_stage, reason):
-        next_stage = current_stage + 1
-        if next_stage < len(self.param_groups):
-            for param in self.param_groups[next_stage]['params']:
-                param.requires_grad = True
-            self.unfreeze_state['current_stage'] = next_stage
-            self.unfreeze_state['stage_history'].append((self.param_groups[next_stage]['name'], reason))
-            return True
-        return False
-    
        
-    def adaptive_unfreeze(self, epoch, patience_reached=False):
+    def adaptive_unfreeze(self, patience_reached=False):
         if self.freeze_mode != 'gradual':
             return False
-        
+        self.total_epochs += 1
+        self.epochs_in_current_stage += 1
+
         current_stage = self.unfreeze_state['current_stage']
         total_stages = self.unfreeze_state['total_stages']
 
         new_stage = False
-
-        if current_stage < total_stages - 1: # Dont wanna unfreeze patch embeddings
-            if epoch in self.unfreeze_epochs:
-                new_stage = self._transition_to_new_stage(current_stage, 'epoch')
-            elif patience_reached:
-                new_stage = self._transition_to_new_stage(current_stage, 'performance')
+        if current_stage == 0 and self.epochs_in_current_stage >= self.head_epochs: # Just for head 
+            new_stage = True
+        elif current_stage > 0 and current_stage < total_stages - 1: # Dont wanna unfreeze patch embeddings
+            if self.epochs_in_current_stage >= self.stage_epochs or patience_reached:
+                new_stage = True
+        
+        if new_stage:
+            self.unfreeze_state['current_stage'] += 1
+            self.epochs_in_current_stage = 0
+            self.unfreeze_state['stage_history'].append((self.unfreeze_state['current_stage'], 'epoch' if not patience_reached else 'performance'))
+            for param in self.param_groups[self.unfreeze_state['current_stage']]['params']:
+                param.requires_grad = True
 
         return new_stage 
     
     def full_finetune(self):
+        self.freeze_mode = 'none'
         for param in self.base_model.parameters():
             param.requires_grad = True
         self.unfreeze_state['current_stage'] = self.unfreeze_state['total_stages']
