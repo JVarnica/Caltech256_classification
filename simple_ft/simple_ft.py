@@ -92,12 +92,11 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
 
     for epoch in range(num_epochs):
         epoch_start_time = time.time()
-       
-       # For epoch unfreeze
-        new_stage  = model.adaptive_unfreeze(patience_reached = False)
+
+        new_stage = model.adaptive_unfreeze(patience_reached=False)
         if new_stage:
             current_stage = model.unfreeze_state['current_stage']
-            new_lr = config['stage_lrs'][current_stage]
+            new_lr = config['stage_lrs'][current_stage] if current_stage < len(config['stage_lrs']) else config['stage_lrs'][-1]
             optimizer = AdamW(model.get_trainable_params(), lr=new_lr, weight_decay=weight_decay, betas=(0.9, 0.999))
             epochs_no_improve = 0
             logging.info(f"Epoch {epoch+1}: Transition to stage {current_stage}, with learning rate of {new_lr}")
@@ -136,7 +135,7 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
                 new_stage = model.adaptive_unfreeze(True)
                 if new_stage:
                     current_stage = model.unfreeze_state['current_stage']
-                    new_lr = config['stage_lrs'][current_stage]
+                    new_lr = config['stage_lrs'][current_stage] if current_stage < len(config['stage_lrs']) else config['stage_lrs'][-1]
                     optimizer = AdamW(model.get_trainable_params(), lr=new_lr, weight_decay=weight_decay, betas=(0.9, 0.999))
                     epochs_no_improve = 0
                     logging.info(f"No improv for {early_stop_patience} epochs. Moving to stage {current_stage}, with learning rate: {new_lr}")

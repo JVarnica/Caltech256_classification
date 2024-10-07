@@ -154,11 +154,13 @@ class BaseTimmWrapper(nn.Module):
         total_stages = self.unfreeze_state['total_stages']
 
         new_stage = False
-        if current_stage == 0 and self.epochs_in_current_stage >= self.head_epochs: # Just for head 
+        if current_stage == 0 and self.epochs_in_current_stage > self.head_epochs: # Just for head 
             new_stage = True
         elif current_stage > 0 and current_stage < total_stages - 1: # Dont wanna unfreeze patch embeddings
-            if self.epochs_in_current_stage >= self.stage_epochs or patience_reached:
+            if self.epochs_in_current_stage > self.stage_epochs or patience_reached:
                 new_stage = True
+        else:
+            new_stage = False 
         
         if new_stage:
             self.unfreeze_state['current_stage'] += 1
