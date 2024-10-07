@@ -61,10 +61,10 @@ class TestTrain_Evaluate(unittest.TestCase):
         new_stage = False
         current_stage = self.model.unfreeze_state['current_stage']
 
-        if current_stage == 0 and self.model.epochs_in_current_stage > self.config['head_epochs']:
+        if current_stage == 0 and self.model.epochs_in_current_stage >= self.config['head_epochs'] - 1:
             new_stage = True
         elif current_stage > 0 and current_stage < self.model.unfreeze_state['total_stages'] - 1:
-            if self.model.epochs_in_current_stage > self.config['stage_epochs'] or patience_reached:
+            if self.model.epochs_in_current_stage > self.config['stage_epochs'] - 1 or patience_reached:
                 new_stage = True
         
         if new_stage:
@@ -176,12 +176,11 @@ class TestTrain_Evaluate(unittest.TestCase):
                                      num_epochs, self.config, callback=mock_callback)
 
         self.assertEqual(self.model.unfreeze_state['current_stage'], 4, "Model did not reach stage 4")
-
-        for i, call in enumerate(mock_callback.calls):
-            if i == 2:
-                self.assertEqual(call['lr'], self.config['stage_lrs'][3], f"Learning rate of stage 3 is not correct {call['lr']}")
-            elif i > 6: 
-                self.assertEqual(call['lr'], self.config['stage_lrs'][4], f"Learning rate shouldnt change")
+        self.assertEqual(mock_callback.calls[1]['lr'], self.config['stage_lrs'][3], f"Learning rate of head is not correct")
+        self.assertEqual(mock_callback.calls[5]['lr'], self.config['stage_lrs'][3], f"Epoch 6 so 3rd counter")
+        self.assertEqual(mock_callback.calls[6]['lr'], self.config['stage_lrs'][4], f"Learning rate of head is not correct")
+        
+       
         
     @patch('simple_ft.simple_ft.train_epoch')
     @patch('simple_ft.simple_ft.validate')

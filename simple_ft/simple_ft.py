@@ -92,14 +92,6 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
 
     for epoch in range(num_epochs):
         epoch_start_time = time.time()
-
-        new_stage = model.adaptive_unfreeze(patience_reached=False)
-        if new_stage:
-            current_stage = model.unfreeze_state['current_stage']
-            new_lr = config['stage_lrs'][current_stage] if current_stage < len(config['stage_lrs']) else config['stage_lrs'][-1]
-            optimizer = AdamW(model.get_trainable_params(), lr=new_lr, weight_decay=weight_decay, betas=(0.9, 0.999))
-            epochs_no_improve = 0
-            logging.info(f"Epoch {epoch+1}: Transition to stage {current_stage}, with learning rate of {new_lr}")
         
         model.train()
         train_loss, train_acc = train_epoch(model, train_loader, optimizer, criterion, device)
@@ -130,20 +122,36 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
         if callback:
             callback(epoch, model, optimizer, train_loss, train_acc, val_loss, val_acc)
 
-        if epochs_no_improve >= early_stop_patience:
-            if not model.unfreeze_state['stage_history'] or  model.unfreeze_state['stage_history'][-1][1] != 'performance': #empty OR epoch CONTINUE
-                new_stage = model.adaptive_unfreeze(True)
-                if new_stage:
-                    current_stage = model.unfreeze_state['current_stage']
-                    new_lr = config['stage_lrs'][current_stage] if current_stage < len(config['stage_lrs']) else config['stage_lrs'][-1]
-                    optimizer = AdamW(model.get_trainable_params(), lr=new_lr, weight_decay=weight_decay, betas=(0.9, 0.999))
-                    epochs_no_improve = 0
-                    logging.info(f"No improv for {early_stop_patience} epochs. Moving to stage {current_stage}, with learning rate: {new_lr}")
-                else:
-                    logging.info(f"No more stages available. Early Stopping")
-                    break
+        patience_reached = epochs_no_improve >= early_stop_patience
+        new_stage = model.adaptive_unfreeze(patience_reached)
+
+        if new_stage:
+            current_stage = model.unfreeze_state['current_stage']
+            new_lr = config['stage_lrs'][current_stage] if current_stage < len(config['stage_lrs']) else config['stage_lrs'][-1]
+            optimizer = AdamW(model.get_trainable_params(), lr=new_lr, weight_decay=weight_decay, betas=(0.9, 0.999))
+            epochs_no_improve = 0
+            if model.unfreeze_state['stage_history'][-1][1] == 'performance': 
+                logging.info(f"Performance-based transition to stage {current_stage}, with learning rate: {new_lr}")
             else:
-                logging.info(f"No Improvement for {early_stop_patience} epochs, after performance-based change last time. Early stopping")
+                logging.info(f"Epoch-Based transition to stage {current_stage} with learning rate: {new_lr} ")
+        elif patience_reached:
+            if model.unfreeze_state['current_stage'] < model.unfreeze_state['total_stages'] -1:
+                if model.unfreeze_state['stage_history'][-1][1] == 'performance': 
+                    logging.info(f"No Improvement for {early_stop_patience} epochs, after performance-based change last time. Early stopping")
+                    break
+                else: 
+                    new_stage = model.adaptive_unfreeze(True)
+                    if new_stage: 
+                        current_stage = model.unfreeze_state['current_stage']
+                        new_lr = config['stage_lrs'][current_stage] if current_stage < len(config['stage_lrs']) else config['stage_lrs'][-1]
+                        optimizer = AdamW(model.get_trainable_params(), lr=new_lr, weight_decay=weight_decay, betas=(0.9, 0.999))
+                        epochs_no_improve = 0
+                        logging.info(f"Forced transition to stage {current_stage}, lr {new_lr}")
+                    else:
+                        logging.info(f"Patience Reached and no more stages available. Early Stopping!!")
+                        break
+            else:
+                logging.info(f"No improvement for {early_stop_patience} epochs in the final stage. Early stopping.")
                 break
 
     total_time = time.time() - start_time
