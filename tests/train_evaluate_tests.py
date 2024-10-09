@@ -5,7 +5,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import unittest
 from unittest.mock import patch, MagicMock
 import torch
+import torch.nn as nn
 from simple_ft.simple_ft import train_and_evaluate
+from models.bs_model_wrapper import BaseTimmWrapper
 
 
 class MockCallback:
@@ -24,6 +26,68 @@ class MockCallback:
             'lr': optimizer.param_groups[0]['lr']
         })
 
+class MockModel(BaseTimmWrapper):
+    def __init__(self):
+        super().__init__('resnet50', num_classes=10, freeze_mode='gradual') 
+        self.model_name = "TestModel"
+        self.freeze_mode = 'gradual'
+        self.head_epochs = 2
+        self.stage_epochs = 4
+        self.epochs_in_current_stage = 0
+        self.unfreeze_state = {
+            'stage_history' : [],
+            'current_stage': 0,
+            'total_stages': 5
+        }
+        self.dummylayer = nn.Linear(10, 10)
+
+    def forward(self, x):
+        return self.dummylayer(x)
+    
+    def get_trainable_params(self):
+        return self.parameters()
+    
+    def state_dict(self):
+        return super().state_dict()
+    #Copy pasted so exactly same
+    def adaptive_unfreeze(self, patience_reached=False):
+        if self.freeze_mode != 'gradual':
+            return False
+
+        current_stage = self.unfreeze_state['current_stage']
+        total_stages = self.unfreeze_state['total_stages']
+        stage_history = self.unfreeze_state['stage_history']
+        new_stage = False
+
+        if current_stage == 0 and self.epochs_in_current_stage >= self.head_epochs - 1: # Just for head 
+            new_stage = True
+        elif current_stage > 0 and current_stage < total_stages - 1: # Dont wanna unfreeze patch embeddings
+            if self.epochs_in_current_stage >= self.stage_epochs -1  or patience_reached:
+                new_stage = True
+        
+        if patience_reached:
+            if len(stage_history) >=1 and stage_history[-1][1] == 'performance':
+                return 'early_stop'
+        
+        if new_stage:
+            current_stage += 1
+            self.epochs_in_current_stage = 0
+            stage_history.append((current_stage, 'epoch' if not patience_reached else 'performance'))
+            for param in self.param_groups[current_stage - 1]['params']:
+                if isinstance(param, list):
+                    for p in param:
+                        if hasattr(p, 'requires_grad'):
+                            p.requires_grad = True
+                elif hasattr(param, 'requires_grad'):
+                    param.requires_grad = True
+        else:
+            self.epochs_in_current_stage += 1
+        #Make sure update
+        self.unfreeze_state['current_stage'] = current_stage
+        self.unfreeze_state['stage_history'] = stage_history
+
+        return new_stage
+
 class DynamicMockOptimizer:
     def __init__(self, *args, **kwargs):
         self.param_groups = [{'lr': kwargs['lr']}]
@@ -31,17 +95,8 @@ class DynamicMockOptimizer:
 class TestTrain_Evaluate(unittest.TestCase):
     def setUp(self):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = MagicMock()
-        self.model.model_name = "TestModel"
-        self.model.get_trainable_params.return_value  = [torch.nn.Parameter(torch.randn(1)) for _ in range(5)]
-        self.model.state_dict.return_value = {}
+        self.model = MockModel()
         self.criterion = MagicMock()
-        self.model.epochs_in_current_stage = 0
-        self.model.unfreeze_state = {
-            'stage_history' : [],
-            'current_stage': 0,
-            'total_stages': 5
-        }
         self.config = {
             'early_stop_patience': 3,
             'min_improvement': 0.001,
@@ -54,31 +109,7 @@ class TestTrain_Evaluate(unittest.TestCase):
     
     def tearDown(self):
         print("---Test Completed---\n")
-
         return super().tearDown()
-    def adaptive_unfreeze_side_effect(self, patience_reached=False):
-    
-        new_stage = False
-        current_stage = self.model.unfreeze_state['current_stage']
-
-        if current_stage == 0 and self.model.epochs_in_current_stage >= self.config['head_epochs'] - 1:
-            new_stage = True
-        elif current_stage > 0 and current_stage < self.model.unfreeze_state['total_stages'] - 1:
-            if self.model.epochs_in_current_stage >= self.config['stage_epochs'] - 1 or patience_reached:
-                new_stage = True
-        
-        if patience_reached:
-            if len(self.model.unfreeze_state['stage_history']) >=1 and self.model.unfreeze_state['stage_history'][-1][1] == 'performance':
-                return 'early_stop'
-            
-        if new_stage:
-            self.model.unfreeze_state['current_stage'] += 1
-            self.model.epochs_in_current_stage = 0
-            self.model.unfreeze_state['stage_history'].append((self.model.unfreeze_state['current_stage'], 'epoch' if not patience_reached else 'performance'))
-        else:
-            self.model.epochs_in_current_stage += 1
-    
-        return new_stage
 
     @patch('simple_ft.simple_ft.train_epoch')
     @patch('simple_ft.simple_ft.validate')
@@ -97,7 +128,6 @@ class TestTrain_Evaluate(unittest.TestCase):
 
         mock_AdamW.side_effect = DynamicMockOptimizer
         
-        self.model.adaptive_unfreeze.side_effect = self.adaptive_unfreeze_side_effect
 
         results = train_and_evaluate(self.model, MagicMock(), MagicMock(), self.criterion, self.device,
                                      num_epochs, self.config, callback=mock_callback)
@@ -132,8 +162,6 @@ class TestTrain_Evaluate(unittest.TestCase):
         mock_callback = MockCallback()
 
         mock_AdamW.side_effect = DynamicMockOptimizer
-        
-        self.model.adaptive_unfreeze.side_effect = self.adaptive_unfreeze_side_effect
 
         results = train_and_evaluate(self.model, MagicMock(), MagicMock(), self.criterion, self.device,
                                     num_epochs, self.config, callback=mock_callback)
@@ -177,8 +205,6 @@ class TestTrain_Evaluate(unittest.TestCase):
 
         mock_AdamW.return_value = DynamicMockOptimizer
 
-        self.model.adaptive_unfreeze.side_effect = self.adaptive_unfreeze_side_effect
-
         results = train_and_evaluate(self.model, MagicMock(), MagicMock(), self.criterion, self.device,
                                      num_epochs, self.config, callback=mock_callback)
         
@@ -204,8 +230,6 @@ class TestTrain_Evaluate(unittest.TestCase):
         mock_callback = MockCallback()
 
         mock_AdamW.side_effect = DynamicMockOptimizer
-        
-        self.model.adaptive_unfreeze.side_effect = self.adaptive_unfreeze_side_effect
 
         results = train_and_evaluate(self.model, MagicMock(), MagicMock(), self.criterion, self.device,
                                      num_epochs, self.config, callback=mock_callback)

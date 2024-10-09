@@ -15,6 +15,7 @@ class BaseTimmWrapper(nn.Module):
         self.head_epochs = head_epochs
         self.stage_epochs = stage_epochs
         self.epochs_in_current_stage = 0
+        self.unfrozen_param_count = []
 
         self.setup_classifier(num_classes)
         self.set_base_model_state(freeze_mode)
@@ -26,6 +27,7 @@ class BaseTimmWrapper(nn.Module):
             'total_stages': len(self.param_groups),
             'stage_history': []
         }
+
 
     def setup_classifier(self, num_classes):
         # Keep architecture the same 
@@ -88,21 +90,21 @@ class BaseTimmWrapper(nn.Module):
     
     def get_resnet50_params(self):
         param_group = [
-            {'params': self.base_model.layer4.parameters(), 'name': 'layer4'},
-            {'params': self.base_model.layer3.parameters(), 'name': 'layer3'},
-            {'params': self.base_model.layer2.parameters(), 'name': 'layer2'},
-            {'params': self.base_model.layer1.parameters(), 'name': 'layer1'},
-            {'params': nn.Sequential(self.base_model.conv1, self.base_model.bn1).parameters(), 'name': 'conv1_bn1'}
+            {'params': list(self.base_model.layer4.parameters()), 'name': 'layer4'},
+            {'params': list(self.base_model.layer3.parameters()), 'name': 'layer3'},
+            {'params': list(self.base_model.layer2.parameters()), 'name': 'layer2'},
+            {'params': list(self.base_model.layer1.parameters()), 'name': 'layer1'},
+            {'params': list(self.base_model.conv1.parameters()) + list(self.base_model.bn1.parameters()), 'name': 'conv1_bn1'}
         ]
         return param_group
     
     def get_regnety_params(self):
         param_group = [
-        {'params': self.base_model.s4.parameters(), 'name': 'block4'},
-        {'params': self.base_model.s3.parameters(),  'name': 'block3'},
-        {'params': self.base_model.s2.parameters(), 'name': 'block2'},
-        {'params': self.base_model.s1.parameters(),  'name': 'block1'},
-        {'params': self.base_model.stem.parameters(), 'name': 'stem'}
+        {'params': list(self.base_model.s4.parameters()), 'name': 'block4'},
+        {'params': list(self.base_model.s3.parameters()),  'name': 'block3'},
+        {'params': list(self.base_model.s2.parameters()), 'name': 'block2'},
+        {'params': list(self.base_model.s1.parameters()),  'name': 'block1'},
+        {'params': list(self.base_model.stem.parameters()), 'name': 'stem'}
         ]
         return param_group
     
@@ -125,20 +127,19 @@ class BaseTimmWrapper(nn.Module):
         {'params': attn, 'name': 'attention'},
         {'params': other_params, 'name': 'other_block_params'},
         {'params': [self.base_model.cls_token, self.base_model.pos_embed], 'name': 'embeddings'},
-        {'params': self.base_model.patch_embed.parameters(), 'name': 'patch_embed'}
+        {'params': list(self.base_model.patch_embed.parameters()), 'name': 'patch_embed'}
         ]
         return param_group
     
     def get_pvt_params(self):
         param_group = [
-            {'params': self.base_model.stages[3].parameters(), 'name': 'stage 4'},
-            {'params': self.base_model.stages[2].parameters(), 'name': 'stage 3'},
-            {'params': self.base_model.stages[1].parameters(), 'name': 'stage 2'},
-            {'params': self.base_model.stages[0].parameters(), 'name': 'stage 1'},
-            {'params': self.base_model.patch_embed.parameters(), 'name': 'patch_embed'}
+            {'params': list(self.base_model.stages[3].parameters()), 'name': 'stage 4'},
+            {'params': list(self.base_model.stages[2].parameters()), 'name': 'stage 3'},
+            {'params': list(self.base_model.stages[1].parameters()), 'name': 'stage 2'},
+            {'params': list(self.base_model.stages[0].parameters()), 'name': 'stage 1'},
+            {'params': list(self.base_model.patch_embed.parameters()), 'name': 'patch_embed'}
         ]
         return param_group
-    
 
     def get_trainable_params(self):
         return filter(lambda p: p.requires_grad, self.base_model.parameters())
@@ -153,10 +154,10 @@ class BaseTimmWrapper(nn.Module):
         stage_history = self.unfreeze_state['stage_history']
         new_stage = False
 
-        if current_stage == 0 and self.epochs_in_current_stage >= self.head_epochs - 1 : # Just for head 
+        if current_stage == 0 and self.epochs_in_current_stage >= self.head_epochs - 1: # Just for head 
             new_stage = True
         elif current_stage > 0 and current_stage < total_stages - 1: # Dont wanna unfreeze patch embeddings
-            if self.epochs_in_current_stage >= self.stage_epochs -1 or patience_reached:
+            if self.epochs_in_current_stage >= self.stage_epochs - 1  or patience_reached:
                 new_stage = True
         
         if patience_reached:
@@ -167,8 +168,13 @@ class BaseTimmWrapper(nn.Module):
             current_stage += 1
             self.epochs_in_current_stage = 0
             stage_history.append((current_stage, 'epoch' if not patience_reached else 'performance'))
-            for param in self.param_groups[current_stage]['params']:
-                param.requires_grad = True
+            for param in self.param_groups[current_stage - 1]['params']:
+                if isinstance(param, list):
+                    for p in param:
+                        if hasattr(p, 'requires_grad'):
+                            p.requires_grad = True
+                elif hasattr(param, 'requires_grad'):
+                    param.requires_grad = True
         else:
             self.epochs_in_current_stage += 1
         #Make sure update
