@@ -147,29 +147,32 @@ class BaseTimmWrapper(nn.Module):
     def adaptive_unfreeze(self, patience_reached=False):
         if self.freeze_mode != 'gradual':
             return False
-        self.total_epochs += 1
-        self.epochs_in_current_stage += 1
 
         current_stage = self.unfreeze_state['current_stage']
         total_stages = self.unfreeze_state['total_stages']
+        stage_history = self.unfreeze_state['stage_history']
 
         new_stage = False
-        if current_stage == 0 and self.epochs_in_current_stage > self.head_epochs: # Just for head 
+        if current_stage == 0 and self.epochs_in_current_stage >= self.head_epochs: # Just for head 
             new_stage = True
         elif current_stage > 0 and current_stage < total_stages - 1: # Dont wanna unfreeze patch embeddings
-            if self.epochs_in_current_stage > self.stage_epochs or patience_reached:
+            if self.epochs_in_current_stage >= self.stage_epochs[-1] or patience_reached:
                 new_stage = True
-        else:
-            new_stage = False 
+        
+        if patience_reached:
+            if len(stage_history)>=1 and stage_history[-1][1] == 'performance':
+                return 'early_stop'
         
         if new_stage:
-            self.unfreeze_state['current_stage'] += 1
+            current_stage += 1
             self.epochs_in_current_stage = 0
-            self.unfreeze_state['stage_history'].append((self.unfreeze_state['current_stage'], 'epoch' if not patience_reached else 'performance'))
-            for param in self.param_groups[self.unfreeze_state['current_stage']]['params']:
+            stage_history.append((current_stage, 'epoch' if not patience_reached else 'performance'))
+            for param in self.param_groups[current_stage]['params']:
                 param.requires_grad = True
+        else:
+            self.epochs_in_current_stage += 1
 
-        return new_stage 
+        return new_stage
     
     def full_finetune(self):
         self.freeze_mode = 'none'
