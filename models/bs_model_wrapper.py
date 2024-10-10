@@ -159,6 +159,8 @@ class BaseTimmWrapper(nn.Module):
         elif current_stage > 0 and current_stage < total_stages - 1: # Dont wanna unfreeze patch embeddings
             if self.epochs_in_current_stage >= self.stage_epochs - 1  or patience_reached:
                 new_stage = True
+        elif current_stage == total_stages - 1 and patience_reached:
+                return 'final_stage_patience'
         
         if patience_reached:
             if len(stage_history) >=1 and stage_history[-1][1] == 'performance':

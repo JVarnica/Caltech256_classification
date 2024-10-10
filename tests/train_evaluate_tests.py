@@ -14,7 +14,7 @@ class MockCallback:
     def __init__(self):
         self.calls = []
     
-    def __call__(self, epoch, model, optimizer ,train_loss, train_acc, val_loss, val_acc):
+    def __call__(self, epoch, model, optimizer ,train_loss, train_acc, val_loss, val_acc, lr):
         self.calls.append({
             'epoch': epoch,
             'model_stage': model.unfreeze_state['current_stage'],
@@ -23,7 +23,7 @@ class MockCallback:
             'train_acc': train_acc,
             'val_loss': val_loss,
             'val_acc': val_acc,
-            'lr': optimizer.param_groups[0]['lr']
+            'lr': lr
         })
 
 class MockModel(BaseTimmWrapper):
@@ -64,6 +64,8 @@ class MockModel(BaseTimmWrapper):
         elif current_stage > 0 and current_stage < total_stages - 1: # Dont wanna unfreeze patch embeddings
             if self.epochs_in_current_stage >= self.stage_epochs -1  or patience_reached:
                 new_stage = True
+        elif current_stage == total_stages - 1 and patience_reached:
+            return 'final_stage_patience'
         
         if patience_reached:
             if len(stage_history) >=1 and stage_history[-1][1] == 'performance':
@@ -193,8 +195,8 @@ class TestTrain_Evaluate(unittest.TestCase):
         print("Test early stopping final stage")
         self.model.epochs_in_current_stage = 0
         num_epochs = 30
-        self.model.unfreeze_state = {'stage_history': [(1, 'epoch'), (2, 'epoch'), (3, 'performance')], 
-                                     'current_stage': 3, 
+        self.model.unfreeze_state = {'stage_history': [(1, 'epoch'), (2, 'epoch'), (3, 'epoch'), (4, 'epoch')], 
+                                     'current_stage': 4, 
                                      'total_stages': 5}
         mock_train_epoch.return_value = (0.6, 80.0)
 
@@ -211,8 +213,8 @@ class TestTrain_Evaluate(unittest.TestCase):
         exp_epochs = 4
         self.assertEqual(len(results['val_accs']), exp_epochs, f"Expected {exp_epochs} epochs, got {len(results['val_accs'])}")
 
-        self.assertEqual(self.model.unfreeze_state['current_stage'], 3, "Model should remain in stage 3")
-        self.assertEqual(len(self.model.unfreeze_state['stage_history']), 3, "No new stage transitions should have occurred")
+        self.assertEqual(self.model.unfreeze_state['current_stage'], 4, "Model should early stop")
+        self.assertEqual(len(self.model.unfreeze_state['stage_history']), 4, "No new stage transitions should have occurred")
         # No learning rate assertions cannot make it start at stage 3 currently and no hugely important just need to know it is at the right stage.
         
     @patch('simple_ft.simple_ft.train_epoch')

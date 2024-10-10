@@ -82,16 +82,25 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
     weight_decay = config['weight_decay']
     min_improvement = config['min_improvement'] 
     early_stop_patience= config['early_stop_patience']
-    head_epochs = config['head_epochs']
-    stage_epochs = config['stage_epochs']
-    
 
     optimizer = AdamW(model.get_trainable_params(), lr=config['stage_lrs'][0], weight_decay=weight_decay, betas=(0.9, 0.999))
 
     start_time = time.time()
+    pending_st_change = False
 
     for epoch in range(num_epochs):
         epoch_start_time = time.time()
+
+        if pending_st_change:
+            current_stage = model.unfreeze_state['current_stage']
+            new_lr = config['stage_lrs'][current_stage] if current_stage < len(config['stage_lrs']) else config['stage_lrs'][-1]
+            optimizer = AdamW(model.get_trainable_params(), lr=new_lr, weight_decay=weight_decay, betas=(0.9, 0.999))
+            epochs_no_improve = 0
+            if model.unfreeze_state['stage_history'][-1][1] == 'performance': 
+                logging.info(f"Performance-based transition to stage {current_stage}, with learning rate: {new_lr}")
+            else:
+                logging.info(f"Epoch-Based transition to stage {current_stage} with learning rate: {new_lr} ")
+            pending_st_change = False
         
         model.train()
         train_loss, train_acc = train_epoch(model, train_loader, optimizer, criterion, device)
@@ -113,38 +122,26 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
         else:
             epochs_no_improve += 1
 
+        current_lr = optimizer.param_groups[0]['lr']
         logging.info(f'Epoch {epoch+1}/{num_epochs}, Epoch Time: {epoch_time:2f}s, '
                      f'Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, '
-                     f'Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}')
+                     f'Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, '
+                     f'Learning rate: {current_lr}, '
+                     f'Trainable params: {sum(p.numel() for p in model.parameters() if p.requires_grad)}')
 
-        #Logic of early stopping
+        stage_change = model.adaptive_unfreeze(epochs_no_improve >= early_stop_patience)
 
-        if callback:
-            callback(epoch, model, optimizer, train_loss, train_acc, val_loss, val_acc)
-
-        patience_reached = epochs_no_improve >= early_stop_patience
-        new_stage = model.adaptive_unfreeze(patience_reached)
-
-        if new_stage == "early_stop":
-            logging.info(f"No Improvement for {early_stop_patience} epochs, after performance-based chnaged last time. Early Stopping")
+        if stage_change == "early_stop":
+            logging.info(f"No Improvement for {early_stop_patience} epochs, after performance-based chnaged last time. Early Stopping at epoch {epoch}")
             break
-        elif new_stage:
-            current_stage = model.unfreeze_state['current_stage']
-            new_lr = config['stage_lrs'][current_stage] if current_stage < len(config['stage_lrs']) else config['stage_lrs'][-1]
-            optimizer = AdamW(model.get_trainable_params(), lr=new_lr, weight_decay=weight_decay, betas=(0.9, 0.999))
-            epochs_no_improve = 0
-            if model.unfreeze_state['stage_history'][-1][1] == 'performance': 
-                logging.info(f"Performance-based transition to stage {current_stage}, with learning rate: {new_lr}")
-            else:
-                logging.info(f"Epoch-Based transition to stage {current_stage} with learning rate: {new_lr} ")
-        elif patience_reached:
-            if model.unfreeze_state['current_stage'] < model.unfreeze_state['total_stages'] -1:
-                logging.info(f"Forced transition to next stage as patience reached")
-                continue
-            else:
-                logging.info(f"Patience Reached and no more stages available. Early Stopping!!")
-                break
-                
+        elif stage_change == "final_stage_patience":
+            logging.info(f"Patience reached final stage. Early Stopping")
+            break
+        elif stage_change:
+            pending_st_change = True
+        
+        if callback:
+            callback(epoch, model, optimizer, train_loss, train_acc, val_loss, val_acc, current_lr)
 
     total_time = time.time() - start_time
     logging.info(f"{model.model_name} total training time: {total_time:.4f} seconds")
@@ -173,7 +170,7 @@ def save_results(result, results_dir, model_name):
         writer.writerow(['Epoch', 'Train Loss', 'Train Acc', 'Val Loss', 'Val Acc', 'Epoch Time'])
         for i in range(len(result['train_losses'])):
             writer.writerow([i+1, result['train_losses'][i], result['train_accs'][i], 
-                             result['val_losses'][i], result['val_accs'][i], result['epoch_times']])
+                             result['val_losses'][i], result['val_accs'][i], result['epoch_times'][i]])
     
     # Plot and save learning curves
     plt.figure(figsize=(12, 4))
@@ -198,7 +195,7 @@ def save_results(result, results_dir, model_name):
     logging.info(f"{model_name} results saved!!")
     plt.close()
 
-def run_experiment(config, model_name):
+def run_experiment(config, model_name, callback=None):
 
     logging.info("Config received in run_experiment:", config)
     logging.info("Model name received in run_experiment:", model_name)
@@ -220,9 +217,7 @@ def run_experiment(config, model_name):
     val_loader = dali_loader(config['val_dir'], config['batch_size'], 
                                  config['num_threads'], 0, model.get_config(), is_training=False)
     
-    results = train_and_evaluate(
-        model, train_loader, val_loader, criterion, device, config['num_epochs'], config
-    )
+    results = train_and_evaluate(model, train_loader, val_loader, criterion, device, config['num_epochs'], config, callback)
     
     base_dir = os.path.dirname(os.path.dirname(config['results_dir']))
     models_dir = os.path.join(base_dir, 'models')
@@ -233,7 +228,6 @@ def run_experiment(config, model_name):
     
     # Save results
     save_results(results, config['results_dir'], model_name)
-
     return results
 
 def main():
