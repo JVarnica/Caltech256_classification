@@ -29,7 +29,7 @@ SIMPLE_FT_CIFAR100_CONFIG = {
     'stage_epochs': 10,
     'stage_lrs': [1e-3, 1e-4, 5e-5, 1e-5, 1e-6], 
     'weight_decay': 1e-5,
-    'early_stop_patience': 10,
+    'early_stop_patience': 5,
     'min_improvement': 0.001
     
 }

@@ -41,7 +41,6 @@ class TestRunExperiment(unittest.TestCase):
             
             experiment_config = self.config.copy()
             experiment_config.update(model_config)
-            experiment_config['model_name'] = model_name
 
             callback_data = []
 
@@ -56,9 +55,7 @@ class TestRunExperiment(unittest.TestCase):
                 'val_loss': val_loss,
                 'val_acc': val_acc,
             })
-            
-            
-            result = run_experiment(self.config, model_name, callback)
+            result = run_experiment(experiment_config, model_name, callback)
 
             # Perform checks
             self.assertIsNotNone(result, f"Result is None for {model_name}")
