@@ -44,7 +44,7 @@ def get_base_model():
     module = importlib.import_module('models.bs_model_wrapper')
     return module.BaseTimmWrapper
 
-def train_epoch(model, train_loader, optimizer, criterion, device):
+def train_epoch(model, train_loader, optimizer, criterion, device, scaler):
     model.train()
     total_loss = 0.0
     correct = 0
@@ -55,15 +55,20 @@ def train_epoch(model, train_loader, optimizer, criterion, device):
         inputs, labels = inputs.to(device), labels.to(device)
 
         optimizer.zero_grad()
-        outputs = model(inputs)
-        loss = criterion(outputs, labels)
-        loss.backward()
-        optimizer.step()
+
+        with autocast:
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
 
         total_loss += loss.item()
         _, predicted = torch.max(outputs, 1)
         total += labels.size(0)
         correct += (predicted == labels).sum().item()
+
     avg_loss = total_loss / len(train_loader)
     accuracy = 100 * (correct / total)
 
@@ -102,6 +107,7 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
     early_stop_patience= config['early_stop_patience']
 
     optimizer = AdamW(model.get_trainable_params(), lr=config['stage_lrs'][0], weight_decay=weight_decay, betas=(0.9, 0.999))
+    scaler = GradScaler()
 
     start_time = time.time()
     pending_st_change = False
@@ -121,7 +127,7 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
             pending_st_change = False
         
         model.train()
-        train_loss, train_acc = train_epoch(model, train_loader, optimizer, criterion, device)
+        train_loss, train_acc = train_epoch(model, train_loader, optimizer, criterion, device, scaler)
 
         model.eval()
         val_loss, val_acc = validate(model, val_loader, criterion, device)
