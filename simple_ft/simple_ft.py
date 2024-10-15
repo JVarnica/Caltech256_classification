@@ -197,8 +197,8 @@ def save_results(result, results_dir, model_name):
 
 def run_experiment(config, model_name, callback=None):
 
-    logging.info("Config received in run_experiment:", config)
-    logging.info("Model name received in run_experiment:", model_name)
+    logging.info("Config received in run_experiment: %s",config)
+    logging.info("Model name received in run_experiment: %s", model_name)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
@@ -221,6 +221,7 @@ def run_experiment(config, model_name, callback=None):
     
     base_dir = os.path.dirname(os.path.dirname(config['results_dir']))
     models_dir = os.path.join(base_dir, 'models')
+    os.makedirs(models_dir, exist_ok=True)
 
     best_model_path = os.path.join(models_dir,  f'{config["model_name"]}_overall_best.pth')
     torch.save(results['best_model_state'], best_model_path)

@@ -20,8 +20,8 @@ def inspect_model(model_name):
         print("No 'head' attribute found")
     
     # Print the last few layers of the model
-    print("\nLast few layers:")
-    for name, module in list(model.named_modules())[-5:]:
+    print("\n layers:")
+    for name, module in list(model.named_modules()):
         print(f"{name}: {module}")
     
     # Try to identify the classification head
@@ -33,7 +33,7 @@ def inspect_model(model_name):
 
 # List model names u want to inspect
 models_to_inspect = [
-   'resnet50.a1_in1k'
+   'vit_base_patch16_224.orig_in21k_ft_in1k'
 ]
 # Inspect each model
 for model_name in models_to_inspect:

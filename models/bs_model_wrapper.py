@@ -79,7 +79,7 @@ class BaseTimmWrapper(nn.Module):
     def get_param_groups(self):
         if 'resnet50' in self.model_name:
             return self.get_resnet50_params()
-        elif 'vit_base' in self.model_name:
+        elif 'vit_base_patch16' in self.model_name:
             return self.get_vit_params()
         elif 'pvt_v2' in self.model_name:
             return self.get_pvt_params()

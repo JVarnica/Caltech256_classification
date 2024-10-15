@@ -28,7 +28,7 @@ class MockCallback:
 
 class MockModel(BaseTimmWrapper):
     def __init__(self):
-        super().__init__('resnet50', num_classes=10, freeze_mode='gradual') 
+        super().__init__('vit_base_patch16', num_classes=10, freeze_mode='gradual') 
         self.model_name = "TestModel"
         self.freeze_mode = 'gradual'
         self.head_epochs = 2
