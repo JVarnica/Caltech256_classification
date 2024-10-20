@@ -13,6 +13,7 @@ import torch
 import torch.nn as nn
 from torch.optim import AdamW
 from torch.cuda.amp import autocast, GradScaler
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
 def setup_logging(dataset_name, model_name, results_dir):
@@ -104,33 +105,35 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
     epochs_no_improve = 0
     weight_decay = config['weight_decay']
     min_improvement = config['min_improvement'] 
-    early_stop_patience= config['early_stop_patience']
+    early_stop_patience = config['early_stop_patience']
+    base_lr = config['base_lr']
 
-    optimizer = AdamW(model.get_trainable_params(), lr=config['stage_lrs'][0], weight_decay=weight_decay, betas=(0.9, 0.999))
+    if model.ft_strategy == 'full':
+        optimizer = AdamW(model.parameters(), lr=base_lr, weight_decay=weight_decay)
+        scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs)
+    else:  # 'gradual' or 'discriminative'
+        param_groups = [
+            {'params': group['params'], 'lr': base_lr * group.get('lr_mult', 1.0)}
+            for group in model.param_groups
+        ]
+        optimizer = AdamW(param_groups, weight_decay=weight_decay)
+        scheduler = None
+
     scaler = GradScaler()
 
     start_time = time.time()
-    pending_st_change = False
 
     for epoch in range(num_epochs):
         epoch_start_time = time.time()
 
-        if pending_st_change:
-            current_stage = model.unfreeze_state['current_stage']
-            new_lr = config['stage_lrs'][current_stage] if current_stage < len(config['stage_lrs']) else config['stage_lrs'][-1]
-            optimizer = AdamW(model.get_trainable_params(), lr=new_lr, weight_decay=weight_decay, betas=(0.9, 0.999))
-            epochs_no_improve = 0
-            if model.unfreeze_state['stage_history'][-1][1] == 'performance': 
-                logging.info(f"Performance-based transition to stage {current_stage}, with learning rate: {new_lr}")
-            else:
-                logging.info(f"Epoch-Based transition to stage {current_stage} with learning rate: {new_lr} ")
-            pending_st_change = False
-        
         model.train()
         train_loss, train_acc = train_epoch(model, train_loader, optimizer, criterion, device, scaler)
 
         model.eval()
         val_loss, val_acc = validate(model, val_loader, criterion, device)
+
+        if scheduler:
+            scheduler.step()
 
         epoch_time = time.time() - epoch_start_time
         train_losses.append(train_loss)
@@ -147,23 +150,32 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
             epochs_no_improve += 1
 
         current_lr = optimizer.param_groups[0]['lr']
-        logging.info(f'Epoch {epoch+1}/{num_epochs}, Epoch Time: {epoch_time:2f}s, '
+        logging.info(f'Epoch {epoch+1}/{num_epochs}, Epoch Time: {epoch_time:.2f}s, '
                      f'Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, '
                      f'Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, '
                      f'Learning rate: {current_lr}, '
                      f'Trainable params: {sum(p.numel() for p in model.parameters() if p.requires_grad)}')
 
-        stage_change = model.adaptive_unfreeze(epochs_no_improve >= early_stop_patience)
+        if epochs_no_improve >= early_stop_patience:
+            logging.info(f"No improvement for {early_stop_patience} epochs. Early stopping.")
+            break
+        if model.ft_strategy == 'gradual':
+            if epochs_no_improve >= early_stop_patience // 2:
+                stage_changed = model.adaptive_unfreeze(force_unfreeze=True)
+                if stage_changed:
+                    optimizer = AdamW(model.get_trainable_params(), lr=base_lr, weight_decay=weight_decay)
+                    epochs_no_improve = 0
+        elif model.ft_strategy == 'discriminative':
+            if epochs_no_improve >= early_stop_patience // 2:
+                for param_group in optimizer.param_groups:
+                    param_group['lr'] *= 0.1
+                logging.info(f"Reducing learning rate. New LR: {optimizer.param_groups[0]['lr']}")
+                epochs_no_improve = 0
 
-        if stage_change == "early_stop":
-            logging.info(f"No Improvement for {early_stop_patience} epochs, after performance-based chnaged last time. Early Stopping at epoch {epoch}")
+        if train_acc > 99.99:
+            logging.info("Training accuracy reached 99.99%. Stopping training.")
             break
-        elif stage_change == "final_stage_patience":
-            logging.info(f"Patience reached final stage. Early Stopping")
-            break
-        elif stage_change:
-            pending_st_change = True
-        
+
         if callback:
             callback(epoch, model, optimizer, train_loss, train_acc, val_loss, val_acc, current_lr)
 
@@ -174,8 +186,8 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
         model.load_state_dict(model_checkpoint)
 
     return {
-        'train_losses':train_losses, 
-        'train_accs':train_accs, 
+        'train_losses': train_losses, 
+        'train_accs': train_accs, 
         'val_losses': val_losses, 
         'val_accs': val_accs, 
         'best_val_acc': best_val_acc, 
@@ -234,7 +246,7 @@ def save_model(model, dataset_name, models_dir):
     logging.info(f"Model saved {save_path}")
 
 
-def run_experiment(config, model_name, callback=None):
+def run_experiment(config, model_name, ft_strategy=None ,callback=None):
 
     dataset_name = config['dataset_name']
 
@@ -275,6 +287,7 @@ def main():
     parser = argparse.ArgumentParser(description='Run fine-tuning on dataset')
     parser.add_argument('dataset', choices=['caltech256', 'cifar100', 'mock_data'], help='Dataset to use')
     parser.add_argument('model', help='Model to fine-tune')
+    parser.add_argument('--ft_strategy', choices=['full', 'gradual', 'discriminative'], default='full', help='Fine-tuning strategy')
     args = parser.parse_args()
 
     config = get_exp_config(args.dataset)

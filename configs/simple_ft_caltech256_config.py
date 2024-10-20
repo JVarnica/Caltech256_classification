@@ -28,7 +28,6 @@ SIMPLE_FT_CALTECH256_CONFIG = {
     'num_epochs': 50,
     'head_epochs': 5,
     'stage_epochs': 10,
-    'stage_lrs': [1e-3, 1e-4, 5e-5, 1e-5, 1e-6], # 1st for head, next 4 for each stage. 
     'weight_decay': 1e-5,
     'early_stop_patience': 5,
     'min_improvement': 0.001
