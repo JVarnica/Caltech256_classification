@@ -149,11 +149,15 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
         else:
             epochs_no_improve += 1
 
-        current_lr = optimizer.param_groups[0]['lr']
+        if model.ft_strategy == 'discriminative':
+            current_lrs = [f"{group['name']}: {group['lr']:.2e}" for group in optimizer.param_groups]
+            lr_string = ", ".join(current_lrs)
+        else:
+            lr_string = f"{optimizer.param_groups[0]['lr']:.2e}"
         logging.info(f'Epoch {epoch+1}/{num_epochs}, Epoch Time: {epoch_time:.2f}s, '
                      f'Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, '
                      f'Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, '
-                     f'Learning rate: {current_lr}, '
+                     f'Learning rate: {lr_string}, '
                      f'Trainable params: {sum(p.numel() for p in model.parameters() if p.requires_grad)}')
 
         if epochs_no_improve >= early_stop_patience:
@@ -246,7 +250,7 @@ def save_model(model, dataset_name, models_dir):
     logging.info(f"Model saved {save_path}")
 
 
-def run_experiment(config, model_name, ft_strategy=None ,callback=None):
+def run_experiment(config, model_name, ft_strategy ,callback=None):
 
     dataset_name = config['dataset_name']
 
@@ -259,9 +263,9 @@ def run_experiment(config, model_name, ft_strategy=None ,callback=None):
 
     BaseTimmWrapper = get_base_model()
     model = BaseTimmWrapper(model_name, config['num_classes'], 
-                            freeze_mode=config.get('freeze_mode'), 
-                            head_epochs=config['head_epochs'], 
-                            stage_epochs=config['stage_epochs'])
+                            ft_strategy=ft_strategy, 
+                            head_epochs=config.get['head_epochs'], 
+                            stage_epochs=config.get['stage_epochs'])
     model = model.to(device)
     
     criterion = nn.CrossEntropyLoss()
@@ -301,12 +305,16 @@ def main():
     # Update config with model-specific parameters
     experiment_config = config.copy()
     experiment_config.update(model_config)
-    
+
+    ft_strategy = args.ft_strategy if args.ft_strategy else experiment_config.get('ft_strategy')
+    logging.info(f"Fine-tuning strategy: {ft_strategy}")
+
     setup_logging(args.dataset, args.model, experiment_config['results_dir'])
+
     
     logging.info(f"Starting experiment for model: {args.model} on dataset: {args.dataset}")
     
-    result = run_experiment(experiment_config, args.model)
+    result = run_experiment(experiment_config, args.model, ft_strategy)
     
     # Print summary
     logging.info(f"\nExperiment Result Summary for {args.model} on {args.dataset}:")

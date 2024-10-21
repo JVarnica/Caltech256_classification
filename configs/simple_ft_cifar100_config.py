@@ -1,20 +1,28 @@
 SIMPLE_FT_CIFAR100_CONFIG = {
     'model_list' : [
-          {
+    {
             'model_name': 'resnet50.a1_in1k', 
-            'freeze_mode': 'gradual',
+            'ft_strategy': 'full',
+            'head_epochs': None,
+            'stage_epochs': None
         },
         {
             'model_name': 'regnety_040.pycls_in1k', 
-            'freeze_mode': 'gradual',
+            'ft_strategy': 'gradual',
+            'head_epochs': 5,
+            'stage_epochs': 10
         },
         {
             'model_name': 'pvt_v2_b3.in1k', 
-            'freeze_mode': 'gradual',
+            'ft_strategy': 'discriminative',
+            'head_epochs': None,
+            'stage_epochs': None
         },
         {
             'model_name': 'vit_base_patch16_224.orig_in21k_ft_in1k', 
-            'freeze_mode': 'gradual',
+            'ft_strategy': 'gradual',
+            'head_epochs': 5,
+            'stage_epochs': 10
         }
     ],
     'dataset_name': 'cifar100',
@@ -28,9 +36,9 @@ SIMPLE_FT_CIFAR100_CONFIG = {
     'num_epochs': 50,
     'head_epochs': 5, 
     'stage_epochs': 10,
-    'stage_lrs': [1e-3, 1e-4, 5e-5, 1e-5, 1e-6], 
+    'base_lr': 1e-4,
     'weight_decay': 1e-5,
-    'early_stop_patience': 5,
+    'early_stop_patience': 6,
     'min_improvement': 0.001
     
 }

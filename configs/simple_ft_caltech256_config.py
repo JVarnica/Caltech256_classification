@@ -2,19 +2,27 @@ SIMPLE_FT_CALTECH256_CONFIG = {
     'model_list' : [
         {
             'model_name': 'resnet50.a1_in1k', 
-            'freeze_mode': 'gradual'
+            'ft_strategy': 'full',
+            'head_epochs': None,
+            'stage_epochs': None
         },
         {
             'model_name': 'regnety_040.pycls_in1k', 
-            'freeze_mode': 'gradual'
+            'ft_strategy': 'gradual',
+            'head_epochs': 5,
+            'stage_epochs': 10
         },
         {
             'model_name': 'pvt_v2_b3.in1k', 
-            'freeze_mode': 'gradual'
+            'ft_strategy': 'discriminative',
+            'head_epochs': None,
+            'stage_epochs': None
         },
         {
             'model_name': 'vit_base_patch16_224.orig_in21k_ft_in1k', 
-            'freeze_mode': 'gradual'
+            'ft_strategy': 'gradual',
+            'head_epochs': 5,
+            'stage_epochs': 10
         }
     ],
     'dataset_name': 'caltech256',
@@ -26,8 +34,7 @@ SIMPLE_FT_CALTECH256_CONFIG = {
     'batch_size': 64,
     'num_threads': 8,
     'num_epochs': 50,
-    'head_epochs': 5,
-    'stage_epochs': 10,
+    'base_lr': 1e-4,
     'weight_decay': 1e-5,
     'early_stop_patience': 5,
     'min_improvement': 0.001
