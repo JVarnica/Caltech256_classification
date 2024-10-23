@@ -34,8 +34,6 @@ SIMPLE_FT_CIFAR100_CONFIG = {
     'batch_size': 64,
     'num_threads': 8,
     'num_epochs': 50,
-    'head_epochs': 5, 
-    'stage_epochs': 10,
     'base_lr': 1e-4,
     'weight_decay': 1e-5,
     'early_stop_patience': 6,

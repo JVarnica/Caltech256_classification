@@ -36,6 +36,6 @@ SIMPLE_FT_CALTECH256_CONFIG = {
     'num_epochs': 50,
     'base_lr': 1e-4,
     'weight_decay': 1e-5,
-    'early_stop_patience': 5,
+    'early_stop_patience': 8,
     'min_improvement': 0.001
 }

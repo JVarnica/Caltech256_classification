@@ -1,3 +1,4 @@
+
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -7,7 +8,7 @@ from unittest.mock import patch
 import torch
 import os
 import logging
-from simple_ft.simple_ft import run_experiment, get_exp_config
+from simple_ft.adaptive_ft_main_2 import run_experiment, get_exp_config
 
 class TestRunExperiment(unittest.TestCase):
     def setUp(self):
@@ -49,7 +50,8 @@ class TestRunExperiment(unittest.TestCase):
                     'val_loss': val_loss,
                     'val_acc': val_acc,
                 })
-                result = run_experiment(experiment_config, model_config['model_name'], callback)
+                ft_strategy = experiment_config.get('ft_strategy')
+                result = run_experiment(experiment_config, model_config['model_name'], ft_strategy ,callback)
 
                 logging.info(f"All checks passed for {model_config['model_name']}")
                 logging.info(f"Best validation accuracy: {result['best_val_acc']:.2f}%")
@@ -91,5 +93,10 @@ class TestRunExperiment(unittest.TestCase):
 
             self.assertEqual(learning_rates[0], config['base_lr'], f"Initial learning rate incorrect for {model_name}")
            
+if __name__ == '__main__':
+        unittest.main()
+
+
+
 if __name__ == '__main__':
         unittest.main()

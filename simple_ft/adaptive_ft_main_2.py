@@ -12,7 +12,7 @@ import timm
 import torch
 import torch.nn as nn
 from torch.optim import AdamW
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
@@ -57,7 +57,7 @@ def train_epoch(model, train_loader, optimizer, criterion, device, scaler):
 
         optimizer.zero_grad()
 
-        with autocast:
+        with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
             outputs = model(inputs)
             loss = criterion(outputs, labels)
 
@@ -106,26 +106,39 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
     weight_decay = config['weight_decay']
     min_improvement = config['min_improvement'] 
     early_stop_patience = config['early_stop_patience']
+    plateau_patience = config['plateau_patience']
     base_lr = config['base_lr']
+    max_adapt = config['max_adapt']
+    adapt_count = 0
 
     if model.ft_strategy == 'full':
         optimizer = AdamW(model.parameters(), lr=base_lr, weight_decay=weight_decay)
         scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs)
-    else:  # 'gradual' or 'discriminative'
-        param_groups = [
-            {'params': group['params'], 'lr': base_lr * group.get('lr_mult', 1.0)}
-            for group in model.param_groups
-        ]
-        optimizer = AdamW(param_groups, weight_decay=weight_decay)
+    elif model.ft_strategy == 'gradual':
+        # Start with only the head parameters
+        optimizer = AdamW(model.get_trainable_params(), lr= base_lr, weight_decay=weight_decay)
+        scheduler = None
+    elif model.ft_strategy == 'discriminative':
+        optimizer = AdamW([{'params': group['params'], 'lr': base_lr * group['lr_mult']} for group in model.param_groups], weight_decay=weight_decay)
         scheduler = None
 
     scaler = GradScaler()
+    scaler._enabled = True
 
     start_time = time.time()
+    pending_stg_change = False
 
     for epoch in range(num_epochs):
         epoch_start_time = time.time()
 
+        if pending_stg_change and model.ft_strategy == 'gradual':
+            logging.info(f"Updating optimizer for stage {model.current_stage}")
+            trainable_params = list(model.get_trainable_params())
+            logging.info(f"Number of trainable parameters: {sum(p.numel() for p in trainable_params)}")
+            optimizer = AdamW(trainable_params, lr=base_lr, weight_decay=weight_decay)
+            epochs_no_improve = 0
+            pending_stg_change = False
+      
         model.train()
         train_loss, train_acc = train_epoch(model, train_loader, optimizer, criterion, device, scaler)
 
@@ -146,42 +159,57 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
             best_val_acc = val_acc
             model_checkpoint = model.state_dict().copy()
             epochs_no_improve = 0
+            plateau_counter = 0
         else:
             epochs_no_improve += 1
+            plateau_counter += 1
 
         if model.ft_strategy == 'discriminative':
-            current_lrs = [f"{group['name']}: {group['lr']:.2e}" for group in optimizer.param_groups]
-            lr_string = ", ".join(current_lrs)
+            lr_string = ", ".join([f"Group {i}: {group['lr']:.2e}" for i, group in enumerate(optimizer.param_groups)])
         else:
             lr_string = f"{optimizer.param_groups[0]['lr']:.2e}"
+
         logging.info(f'Epoch {epoch+1}/{num_epochs}, Epoch Time: {epoch_time:.2f}s, '
                      f'Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, '
                      f'Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, '
                      f'Learning rate: {lr_string}, '
                      f'Trainable params: {sum(p.numel() for p in model.parameters() if p.requires_grad)}')
 
-        if epochs_no_improve >= early_stop_patience:
-            logging.info(f"No improvement for {early_stop_patience} epochs. Early stopping.")
-            break
-        if model.ft_strategy == 'gradual':
-            if epochs_no_improve >= early_stop_patience // 2:
-                stage_changed = model.adaptive_unfreeze(force_unfreeze=True)
-                if stage_changed:
-                    optimizer = AdamW(model.get_trainable_params(), lr=base_lr, weight_decay=weight_decay)
-                    epochs_no_improve = 0
-        elif model.ft_strategy == 'discriminative':
-            if epochs_no_improve >= early_stop_patience // 2:
-                for param_group in optimizer.param_groups:
-                    param_group['lr'] *= 0.1
-                logging.info(f"Reducing learning rate. New LR: {optimizer.param_groups[0]['lr']}")
-                epochs_no_improve = 0
+        if plateau_counter >= plateau_patience:
+          logging.info(f"No improvement for {plateau_patience} epochs. Early stopping.")
+          break
+        
+        if adapt_count >= max_adapt:
+          logging.info(f"Maximum number of adaptions. Stop Trainning!!")
+          break
 
-        if train_acc > 99.99:
+        if epochs_no_improve >= early_stop_patience and adapt_count < max_adapt:
+            if model.ft_strategy == 'gradual':
+              stage_change = model.adaptive_unfreeze(force_unfreeze=True)
+              if stage_change:
+                pending_stg_change = True
+                adapt_count += 1
+                epochs_no_improve = 0
+            elif model.ft_strategy == 'discriminative':
+              changed = model.adaptive_unfreeze(force_unfreeze=True)
+              if changed:
+                optimizer = AdamW([{'params': group['params'], 'lr': base_lr * group['lr_mult']} for group in model.param_groups], weight_decay=weight_decay)
+                logging.info(f"Reduced learning rates. New rates: {[group['lr'] for group in optimizer.param_groups]}")
+                adapt_count += 1
+                epochs_no_improve = 0
+        elif model.ft_strategy == 'gradual':
+              stage_change = model.adaptive_unfreeze(force_unfreeze=False)
+              if stage_change:
+                  pending_stg_change = True
+                  adapt_count += 1
+                  epochs_no_improve = 0
+
+        if train_acc > 99.98:
             logging.info("Training accuracy reached 99.99%. Stopping training.")
             break
 
         if callback:
-            callback(epoch, model, optimizer, train_loss, train_acc, val_loss, val_acc, current_lr)
+            callback(epoch, model, optimizer, train_loss, train_acc, val_loss, val_acc, optimizer.param_groups[0]['lr'])
 
     total_time = time.time() - start_time
     logging.info(f"{model.model_name} total training time: {total_time:.4f} seconds")
@@ -200,11 +228,11 @@ def train_and_evaluate(model, train_loader, val_loader, criterion, device, num_e
         'best_model_state': model_checkpoint
     }
 
-def save_results(result, results_dir, dataset_name, model_name):
+def save_results(result, results_dir, dataset_name, model_name, ft_strategy):
     os.makedirs(results_dir, exist_ok=True)
     
     # Save metrics to CSV
-    csv_path = os.path.join(results_dir, f"{dataset_name}_{model_name}_metrics.csv")
+    csv_path = os.path.join(results_dir, f"{ft_strategy}_{dataset_name}_{model_name}_metrics.csv")
     with open(csv_path, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(['Epoch', 'Train Loss', 'Train Acc', 'Val Loss', 'Val Acc', 'Epoch Time'])
@@ -217,7 +245,7 @@ def save_results(result, results_dir, dataset_name, model_name):
     plt.subplot(1, 2, 1)
     plt.plot(result['train_losses'], label='Train')
     plt.plot(result['val_losses'], label='Validation')
-    plt.title(f'{dataset_name} - {model_name} Loss Curves')
+    plt.title(f'{ft_strategy}_{dataset_name} - {model_name} Loss Curves')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.legend()
@@ -235,7 +263,7 @@ def save_results(result, results_dir, dataset_name, model_name):
     logging.info(f"{dataset_name}_{model_name} results saved!!")
     plt.close()
 
-def save_model(model, dataset_name, models_dir):
+def save_model(model, dataset_name, models_dir, ft_strategy):
     model_name = model.model_name
     num_classes = model.num_classes
 
@@ -245,7 +273,7 @@ def save_model(model, dataset_name, models_dir):
         'num_classes': num_classes,
         'dataset_name': dataset_name
     }
-    save_path = os.path.join(models_dir, f'{dataset_name}_{model_name}_best.pth')
+    save_path = os.path.join(models_dir, f'{ft_strategy}_{dataset_name}_{model_name}_best.pth')
     torch.save(save_dict, save_path)
     logging.info(f"Model saved {save_path}")
 
@@ -254,7 +282,7 @@ def run_experiment(config, model_name, ft_strategy ,callback=None):
 
     dataset_name = config['dataset_name']
 
-    logging.info("Starting experiment for {model_name} on {dataset_name}")
+    logging.info("Starting experiment for {model_name} on {dataset_name} using {ft_strategy}")
     logging.info("Configuration: {config}")
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -264,8 +292,9 @@ def run_experiment(config, model_name, ft_strategy ,callback=None):
     BaseTimmWrapper = get_base_model()
     model = BaseTimmWrapper(model_name, config['num_classes'], 
                             ft_strategy=ft_strategy, 
-                            head_epochs=config.get['head_epochs'], 
-                            stage_epochs=config.get['stage_epochs'])
+                            head_epochs=config['head_epochs'], 
+                            stage_epochs=config['stage_epochs'])
+                            
     model = model.to(device)
     
     criterion = nn.CrossEntropyLoss()
@@ -282,8 +311,8 @@ def run_experiment(config, model_name, ft_strategy ,callback=None):
     os.makedirs(models_dir, exist_ok=True)
     
     # Save results
-    save_results(results, config['results_dir'], dataset_name, model_name)
-    save_model(model, dataset_name, models_dir)
+    save_results(results, config['results_dir'], dataset_name, model_name, ft_strategy)
+    save_model(model, dataset_name, models_dir, ft_strategy)
 
     return results
 
@@ -291,7 +320,7 @@ def main():
     parser = argparse.ArgumentParser(description='Run fine-tuning on dataset')
     parser.add_argument('dataset', choices=['caltech256', 'cifar100', 'mock_data'], help='Dataset to use')
     parser.add_argument('model', help='Model to fine-tune')
-    parser.add_argument('--ft_strategy', choices=['full', 'gradual', 'discriminative'], default='full', help='Fine-tuning strategy')
+    parser.add_argument('--ft_strategy', choices=['full', 'gradual', 'discriminative'], default=None, help='Fine-tuning strategy')
     args = parser.parse_args()
 
     config = get_exp_config(args.dataset)
@@ -299,22 +328,21 @@ def main():
     
     model_config = next((m for m in config['model_list'] if m['model_name'] == args.model), None)
 
+
     if model_config is None:
         raise ValueError(f"Model {args.model} not found in configuration for dataset {args.dataset}")
     
     # Update config with model-specific parameters
     experiment_config = config.copy()
     experiment_config.update(model_config)
+    if args.ft_strategy:
+      experiment_config['ft_strategy'] = args.ft_strategy
 
-    ft_strategy = args.ft_strategy if args.ft_strategy else experiment_config.get('ft_strategy')
-    logging.info(f"Fine-tuning strategy: {ft_strategy}")
+    logging.info(f"Fine-tuning strategy: {experiment_config['ft_strategy']}")
 
     setup_logging(args.dataset, args.model, experiment_config['results_dir'])
-
     
-    logging.info(f"Starting experiment for model: {args.model} on dataset: {args.dataset}")
-    
-    result = run_experiment(experiment_config, args.model, ft_strategy)
+    result = run_experiment(experiment_config, args.model, experiment_config['ft_strategy'])
     
     # Print summary
     logging.info(f"\nExperiment Result Summary for {args.model} on {args.dataset}:")
