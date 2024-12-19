@@ -8,7 +8,7 @@ from unittest.mock import patch
 import torch
 import os
 import logging
-from simple_ft.adaptive_ft_main_2 import run_experiment, get_exp_config
+from caltech_proj.simple_ft.adaptive_ft_main import run_experiment, get_exp_config
 
 class TestRunExperiment(unittest.TestCase):
     def setUp(self):

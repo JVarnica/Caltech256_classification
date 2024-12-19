@@ -1,0 +1,24 @@
+2024-10-23 13:30:21,166 - INFO - Testing vit_base_patch16_224.orig_in21k_ft_in1k with full strategy...
+2024-10-23 13:30:21,166 - INFO - Starting experiment for {model_name} on {dataset_name} using {ft_strategy}
+2024-10-23 13:30:21,166 - INFO - Configuration: {config}
+2024-10-23 13:30:22,318 - INFO - Loading pretrained weights from Hugging Face hub (timm/vit_base_patch16_224.orig_in21k_ft_in1k)
+2024-10-23 13:30:22,433 - INFO - [timm/vit_base_patch16_224.orig_in21k_ft_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+2024-10-23 13:30:22,840 - INFO - Missing keys (head.weight, head.bias) discovered while loading pretrained weights. This is expected if model is being adapted.
+2024-10-23 13:51:42,462 - INFO - Testing vit_base_patch16_224.orig_in21k_ft_in1k with full strategy...
+2024-10-23 13:51:42,463 - INFO - Starting experiment for {model_name} on {dataset_name} using {ft_strategy}
+2024-10-23 13:51:42,463 - INFO - Configuration: {config}
+2024-10-23 13:51:43,611 - INFO - Loading pretrained weights from Hugging Face hub (timm/vit_base_patch16_224.orig_in21k_ft_in1k)
+2024-10-23 13:51:43,717 - INFO - [timm/vit_base_patch16_224.orig_in21k_ft_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+2024-10-23 13:51:44,138 - INFO - Missing keys (head.weight, head.bias) discovered while loading pretrained weights. This is expected if model is being adapted.
+2024-10-23 13:52:20,789 - INFO - Testing vit_base_patch16_224.orig_in21k_ft_in1k with full strategy...
+2024-10-23 13:52:20,789 - INFO - Starting experiment for {model_name} on {dataset_name} using {ft_strategy}
+2024-10-23 13:52:20,789 - INFO - Configuration: {config}
+2024-10-23 13:52:21,928 - INFO - Loading pretrained weights from Hugging Face hub (timm/vit_base_patch16_224.orig_in21k_ft_in1k)
+2024-10-23 13:52:22,034 - INFO - [timm/vit_base_patch16_224.orig_in21k_ft_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+2024-10-23 13:52:22,451 - INFO - Missing keys (head.weight, head.bias) discovered while loading pretrained weights. This is expected if model is being adapted.
+2024-10-23 14:01:56,964 - INFO - Testing vit_base_patch16_224.orig_in21k_ft_in1k with full strategy...
+2024-10-23 14:01:56,964 - INFO - Starting experiment for {model_name} on {dataset_name} using {ft_strategy}
+2024-10-23 14:01:56,964 - INFO - Configuration: {config}
+2024-10-23 14:01:58,098 - INFO - Loading pretrained weights from Hugging Face hub (timm/vit_base_patch16_224.orig_in21k_ft_in1k)
+2024-10-23 14:01:58,203 - INFO - [timm/vit_base_patch16_224.orig_in21k_ft_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+2024-10-23 14:01:58,591 - INFO - Missing keys (head.weight, head.bias) discovered while loading pretrained weights. This is expected if model is being adapted.

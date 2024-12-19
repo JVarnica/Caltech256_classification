@@ -204,9 +204,9 @@ class BaseTimmWrapper(nn.Module):
         return self.base_model(x)
 
     def get_trainable_params(self):
-      trainable = [p for p in self.base_model.parameters() if p.requires_grad]
-      logging.info(f"Getting trainable params: {sum(p.numel() for p in trainable)}")
-      return trainable
+       trainable = [p for p in self.base_model.parameters() if p.requires_grad]
+       logging.info(f"Getting trainable params: {sum(p.numel() for p in trainable)}")
+       return trainable
     
     def get_config(self):
         return self.data_config

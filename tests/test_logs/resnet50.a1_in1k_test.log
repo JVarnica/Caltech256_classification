@@ -1,0 +1,24 @@
+2024-10-23 13:30:18,982 - INFO - Testing resnet50.a1_in1k with discriminative strategy...
+2024-10-23 13:30:18,982 - INFO - Starting experiment for {model_name} on {dataset_name} using {ft_strategy}
+2024-10-23 13:30:18,982 - INFO - Configuration: {config}
+2024-10-23 13:30:19,277 - INFO - Loading pretrained weights from Hugging Face hub (timm/resnet50.a1_in1k)
+2024-10-23 13:30:19,490 - INFO - [timm/resnet50.a1_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+2024-10-23 13:30:19,636 - INFO - Missing keys (fc.weight, fc.bias) discovered while loading pretrained weights. This is expected if model is being adapted.
+2024-10-23 13:51:40,251 - INFO - Testing resnet50.a1_in1k with discriminative strategy...
+2024-10-23 13:51:40,251 - INFO - Starting experiment for {model_name} on {dataset_name} using {ft_strategy}
+2024-10-23 13:51:40,251 - INFO - Configuration: {config}
+2024-10-23 13:51:40,540 - INFO - Loading pretrained weights from Hugging Face hub (timm/resnet50.a1_in1k)
+2024-10-23 13:51:40,815 - INFO - [timm/resnet50.a1_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+2024-10-23 13:51:40,960 - INFO - Missing keys (fc.weight, fc.bias) discovered while loading pretrained weights. This is expected if model is being adapted.
+2024-10-23 13:52:18,772 - INFO - Testing resnet50.a1_in1k with discriminative strategy...
+2024-10-23 13:52:18,772 - INFO - Starting experiment for {model_name} on {dataset_name} using {ft_strategy}
+2024-10-23 13:52:18,772 - INFO - Configuration: {config}
+2024-10-23 13:52:19,051 - INFO - Loading pretrained weights from Hugging Face hub (timm/resnet50.a1_in1k)
+2024-10-23 13:52:19,222 - INFO - [timm/resnet50.a1_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+2024-10-23 13:52:19,348 - INFO - Missing keys (fc.weight, fc.bias) discovered while loading pretrained weights. This is expected if model is being adapted.
+2024-10-23 14:01:54,701 - INFO - Testing resnet50.a1_in1k with discriminative strategy...
+2024-10-23 14:01:54,702 - INFO - Starting experiment for {model_name} on {dataset_name} using {ft_strategy}
+2024-10-23 14:01:54,702 - INFO - Configuration: {config}
+2024-10-23 14:01:54,991 - INFO - Loading pretrained weights from Hugging Face hub (timm/resnet50.a1_in1k)
+2024-10-23 14:01:55,183 - INFO - [timm/resnet50.a1_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+2024-10-23 14:01:55,314 - INFO - Missing keys (fc.weight, fc.bias) discovered while loading pretrained weights. This is expected if model is being adapted.

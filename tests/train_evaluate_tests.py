@@ -5,242 +5,192 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import unittest
 from unittest.mock import patch, MagicMock
 import torch
-import torch.nn as nn
-from simple_ft.simple_ft import train_and_evaluate
+from simple_ft.adaptive_ft_main import train_and_evaluate
 from models.bs_model_wrapper import BaseTimmWrapper
 
-
 class MockCallback:
-    def __init__(self):
-        self.calls = []
-    
-    def __call__(self, epoch, model, optimizer ,train_loss, train_acc, val_loss, val_acc, lr):
-        self.calls.append({
-            'epoch': epoch,
-            'model_stage': model.unfreeze_state['current_stage'],
-            'optimizer': optimizer,
-            'train_loss': train_loss,
-            'train_acc': train_acc,
-            'val_loss': val_loss,
-            'val_acc': val_acc,
-            'lr': lr
-        })
-
-class MockModel(BaseTimmWrapper):
-    def __init__(self):
-        super().__init__('vit_base_patch16', num_classes=10, freeze_mode='gradual') 
-        self.model_name = "TestModel"
-        self.freeze_mode = 'gradual'
-        self.head_epochs = 2
-        self.stage_epochs = 4
-        self.epochs_in_current_stage = 0
-        self.unfreeze_state = {
-            'stage_history' : [],
-            'current_stage': 0,
-            'total_stages': 5
-        }
-        self.dummylayer = nn.Linear(10, 10)
-
-    def forward(self, x):
-        return self.dummylayer(x)
-    
-    def get_trainable_params(self):
-        return self.parameters()
-    
-    def state_dict(self):
-        return super().state_dict()
-    #Copy pasted so exactly same
-    def adaptive_unfreeze(self, patience_reached=False):
-        if self.freeze_mode != 'gradual':
-            return False
-
-        current_stage = self.unfreeze_state['current_stage']
-        total_stages = self.unfreeze_state['total_stages']
-        stage_history = self.unfreeze_state['stage_history']
-        new_stage = False
-
-        if current_stage == 0 and self.epochs_in_current_stage >= self.head_epochs - 1: # Just for head 
-            new_stage = True
-        elif current_stage > 0 and current_stage < total_stages - 1: # Dont wanna unfreeze patch embeddings
-            if self.epochs_in_current_stage >= self.stage_epochs -1  or patience_reached:
-                new_stage = True
-        elif current_stage == total_stages - 1 and patience_reached:
-            return 'final_stage_patience'
-        
-        if patience_reached:
-            if len(stage_history) >=1 and stage_history[-1][1] == 'performance':
-                return 'early_stop'
-        
-        if new_stage:
-            current_stage += 1
-            self.epochs_in_current_stage = 0
-            stage_history.append((current_stage, 'epoch' if not patience_reached else 'performance'))
-            for param in self.param_groups[current_stage - 1]['params']:
-                if isinstance(param, list):
-                    for p in param:
-                        if hasattr(p, 'requires_grad'):
-                            p.requires_grad = True
-                elif hasattr(param, 'requires_grad'):
-                    param.requires_grad = True
-        else:
-            self.epochs_in_current_stage += 1
-        #Make sure update
-        self.unfreeze_state['current_stage'] = current_stage
-        self.unfreeze_state['stage_history'] = stage_history
-
-        return new_stage
+   def __init__(self):
+       self.calls = []
+   
+   def __call__(self, epoch, model, optimizer, train_loss, train_acc, val_loss, val_acc, lr):
+       self.calls.append({
+           'epoch': epoch,
+           'stage': model.current_stage if hasattr(model, 'current_stage') else 0,
+           'optimizer': optimizer,
+           'train_loss': train_loss,
+           'train_acc': train_acc,
+           'val_loss': val_loss,
+           'val_acc': val_acc,
+           'lr': lr
+       })
 
 class DynamicMockOptimizer:
-    def __init__(self, *args, **kwargs):
-        self.param_groups = [{'lr': kwargs['lr']}]
+   def __init__(self, *args, **kwargs):
+       self.param_groups = [{'lr': kwargs.get('lr', 0.001)}]
 
-class TestTrain_Evaluate(unittest.TestCase):
+class TestTrainEvaluate(unittest.TestCase):
     def setUp(self):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = MockModel()
         self.criterion = MagicMock()
         self.config = {
-            'early_stop_patience': 3,
-            'min_improvement': 0.001,
-            'stage_lrs': [0.001, 0.0005, 0.0001, 0.00005 ,0.00001],
-            'weight_decay': 1e-5,
-            'head_epochs': 2,
-            'stage_epochs': 5
-        }
+           'early_stop_patience': 3,
+           'plateau_patience': 5,
+           'min_improvement': 0.001,
+           'base_lr': 0.001,
+           'weight_decay': 1e-5,
+           'head_epochs': 2,
+           'stage_epochs': 4,
+           'max_adapt': 5
+       }
         print("\n--- Starting New Test ---")
-    
-    def tearDown(self):
-        print("---Test Completed---\n")
-        return super().tearDown()
 
-    @patch('simple_ft.simple_ft.train_epoch')
-    @patch('simple_ft.simple_ft.validate')
+    @patch('simple_ft.adaptive_ft_main_2.get_dali_loader')
+    @patch('simple_ft.adaptive_ft_main.train_epoch')
+    @patch('simple_ft.adaptive_ft_main.validate')
     @patch('torch.optim.AdamW')
-    # Simulate early stopping. 1 stage change, 2nd needs to break not change.
-    def test_early_stopping(self, mock_AdamW, mock_validate, mock_train_epoch):
-        print("Running test early stop")
-        self.model.epochs_in_current_stage = 0
-        num_epochs = 30
-        mock_train_epoch.return_value = (0.5, 80.0)
-        val_losses = [0.4, 0.39, 0.38] + [0.37 + i*0.01 for i in range(27)]
-        val_accs =  [82.0, 84.5, 83.0]+ [83.0 - i*0.5 for i in range(27)]
-        
-        mock_validate.side_effect = list(zip(val_losses, val_accs))
-        mock_callback = MockCallback()
+    def test_continuous_improvement(self, mock_AdamW, mock_validate, mock_train_epoch, mock_get_dali_loader):
+       """Test both strategies with continuous improvement to check stage/LR changes"""
+       num_epochs = 30
+       models_to_test = [
+           ('resnet50.a1_in1k', 'gradual'),
+           ('vit_base_patch16_224.orig_in21k_ft_in1k', 'discriminative'),
+           ('pvt_v2_b3.in1k', 'gradual'),
+           ('regnety_040.pycls_in1k', 'full')
+       ]
 
-        mock_AdamW.side_effect = DynamicMockOptimizer
-        
+       for model_name, strategy in models_to_test:
+           with self.subTest(model=model_name, strategy=strategy):
+               print(f"\nTesting {model_name} with {strategy} strategy")
+               model = BaseTimmWrapper(model_name, num_classes=10, 
+                                     ft_strategy=strategy,
+                                     head_epochs=self.config['head_epochs'],
+                                     stage_epochs=self.config['stage_epochs'])
+               
+               mock_get_dali_loader.return_value = MagicMock()
+               mock_train_epoch.return_value = (0.5, 80.0)
+               val_losses = [0.4 - i*0.01 for i in range(num_epochs)]
+               val_accs = [70.0 + i*0.5 for i in range(num_epochs)]
+               mock_validate.side_effect = list(zip(val_losses, val_accs))
 
-        results = train_and_evaluate(self.model, MagicMock(), MagicMock(), self.criterion, self.device,
-                                     num_epochs, self.config, callback=mock_callback)
-        exp_epochs = 2 + 3 + 3
-        self.assertEqual(len(results['val_accs']), exp_epochs, f"More epochs than expected {exp_epochs}")
-        self.assertEqual(self.model.unfreeze_state['current_stage'], 2, "Training should stop at the second stage, as no improvements")
-        self.assertEqual(results['best_val_acc'], 84.5, "Best accuracy should be 84.5")
-        
-        # Check stage transitions
-        expected_stages = [(1, 'epoch'), (2, 'performance')]
-        self.assertEqual(self.model.unfreeze_state['stage_history'], expected_stages)
-        # check if lr has chnaged 
-        self.assertEqual(mock_callback.calls[0]['lr'], self.config['stage_lrs'][0], f"Learning rate of head is not correct in epoch 1") 
-        self.assertEqual(mock_callback.calls[1]['lr'], self.config['stage_lrs'][0], f"Learning rate of stage 0 is not correct")
-        self.assertEqual(mock_callback.calls[2]['lr'], self.config['stage_lrs'][1], f"Learning rate should chnage at begining of epoch 3")
-        self.assertEqual(mock_callback.calls[-1]['lr'], self.config['stage_lrs'][2],f"The learning rate doesnt match stage 2 learning rate")
+               mock_callback = MockCallback()
+               mock_AdamW.side_effect = DynamicMockOptimizer
 
-        print(f"Final Stage: {self.model.unfreeze_state['current_stage']}")
+
+               results = train_and_evaluate(model, MagicMock(), MagicMock(), 
+                                         self.criterion, self.device,
+                                         num_epochs, self.config, callback=mock_callback)
+               if strategy == 'full':
+                    # Verify all params trainable
+                    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+                    total_params = sum(p.numel() for p in model.parameters())
+                    self.assertEqual(trainable_params, total_params, 
+                                    f"All parameters should be trainable for {model_name}")
+                    
+                    # Verify learning rate decreases (cosine schedule)
+                    lrs = [call['lr'] for call in mock_callback.calls]
+                    self.assertGreater(lrs[0], lrs[-1], 
+                                    f"Learning rate should decrease with cosine schedule for {model_name}")
+                    self.assertEqual(len(set(lrs)), len(lrs), 
+                                    f"Learning rate should change every epoch for {model_name}")
+               elif strategy == 'gradual':
+                   # Verify stage progression
+                   stage_changes = [i for i, call in enumerate(mock_callback.calls[1:], 1) 
+                                  if call['stage'] != mock_callback.calls[i-1]['stage']]
+                   self.assertEqual(len(stage_changes), 4, f"Should have 4 stage changes for {model_name}")
+
+               elif strategy == 'discriminative':
+                   # All params should be trainable from start
+                   trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+                   total_params = sum(p.numel() for p in model.parameters())
+                   self.assertEqual(trainable_params, total_params, 
+                                  f"All parameters should be trainable for {model_name}")
+
+               self.assertEqual(len(results['val_accs']), num_epochs, 
+                              f"Should complete all epochs for {model_name}")
+               self.assertGreater(results['best_val_acc'], val_accs[0], 
+                                f"Should show improvement for {model_name}")
+               
+    @patch('simple_ft.adaptive_ft_main_2.get_dali_loader')
+    @patch('simple_ft.adaptive_ft_main.train_epoch')
+    @patch('simple_ft.adaptive_ft_main.validate')
+    @patch('torch.optim.AdamW')
+    def test_plateau_and_adaptation(self, mock_AdamW, mock_validate, mock_train_epoch, mock_get_dali_loader):
+        """Test both strategies with plateaus to verify adaptations and early stopping"""
+        num_epochs = 50
+        models_to_test = [
+           ('resnet50.a1_in1k', 'full'),
+           ('vit_base_patch16_224.orig_in21k_ft_in1k', 'discriminative'),
+           ('regnety_040.pycls_in1k', 'full')
+       ]
+
+        for model_name, strategy in models_to_test:
+            with self.subTest(model=model_name, strategy=strategy):
+                print(f"\nTesting {model_name} with {strategy} strategy - plateau behavior")
+                model = BaseTimmWrapper(model_name, num_classes=10, 
+                                     ft_strategy=strategy,
+                                     head_epochs=self.config['head_epochs'],
+                                     stage_epochs=self.config['stage_epochs'])
+
+               # Pattern: improve -> plateau -> improve -> plateau -> final plateau
+                val_losses = []
+                val_accs = []
+               
+               # Initial improvement
+                for i in range(5):
+                   val_losses.append(0.4 - i*0.01)
+                   val_accs.append(70 + i)
+               
+               # First plateau - trigger adaptation
+                for _ in range(4):
+                   val_losses.append(val_losses[-1])
+                   val_accs.append(val_accs[-1])
+               
+               # Second improvement phase
+                for i in range(5):
+                   val_losses.append(val_losses[-1] - 0.01)
+                   val_accs.append(val_accs[-1] + 1)
+               
+               # Second plateau - trigger adaptation
+                for _ in range(4):
+                   val_losses.append(val_losses[-1])
+                   val_accs.append(val_accs[-1])
+               
+               # Final plateau to trigger early stopping
+                for _ in range(6):
+                   val_losses.append(val_losses[-1])
+                   val_accs.append(val_accs[-1])
                 
+                mock_get_dali_loader.return_value = MagicMock()
+                mock_train_epoch.return_value = (0.5, 80.0)
+                mock_validate.side_effect = list(zip(val_losses, val_accs))
+                mock_callback = MockCallback()
+                mock_AdamW.side_effect = DynamicMockOptimizer
 
-    @patch('simple_ft.simple_ft.train_epoch')
-    @patch('simple_ft.simple_ft.validate')
-    @patch('torch.optim.AdamW')
-    def test_continuous_improvement(self, mock_AdamW, mock_validate, mock_train_epoch):
-        print("Test continuous improvements")
-        self.model.epochs_in_current_stage = 0
-        num_epochs = 30
-        mock_train_epoch.return_value = (0.5, 80.0)
-        val_losses = [0.4 - i*0.01 for i in range(num_epochs)]
-        val_accs = [70.0 + i*0.5 for i in range(num_epochs)]
-        mock_validate.side_effect = list(zip(val_losses, val_accs))
-        mock_callback = MockCallback()
+                results = train_and_evaluate(model, MagicMock(), MagicMock(), 
+                                         self.criterion, self.device,
+                                         num_epochs, self.config, callback=mock_callback)
 
-        mock_AdamW.side_effect = DynamicMockOptimizer
+                # Verify adaptations and early stopping
+                if strategy == 'gradual':
+                   stage_changes = [i for i, call in enumerate(mock_callback.calls[1:], 1) 
+                                  if call['stage'] != mock_callback.calls[i-1]['stage']]
+                   self.assertEqual(len(stage_changes), 2, 
+                                  f"Should have 2 forced stage changes for {model_name}")
+                   
+                elif strategy == 'full':
+                    lrs = [call['lr'] for call in mock_callback.calls]
+                    self.assertGreater(lrs[0], lrs[-1], 
+                      f"Learning rate should decrease with cosine schedule for {model_name}")            
+            
+                elif strategy == 'discriminative':
+                   lr_changes = [i for i in range(1, len(mock_callback.calls)) 
+                               if mock_callback.calls[i]['lr'] != mock_callback.calls[i-1]['lr']]
+                   self.assertEqual(len(lr_changes), 2, 
+                                  f"Should have 2 LR reductions for {model_name}")
 
-        results = train_and_evaluate(self.model, MagicMock(), MagicMock(), self.criterion, self.device,
-                                    num_epochs, self.config, callback=mock_callback)
-        
-        self.assertEqual(len(results['val_accs']), num_epochs, "Training should complete all epochs")
-        self.assertEqual(self.model.unfreeze_state['current_stage'], 4, "All stages should be unfrozen")
-        self.assertEqual(results['best_val_acc'], val_accs[-1], "Best accuracy should be the last one")
-        self.assertIn('best_model_state', results, "Best model state not saved in results")
-        self.assertIsNotNone(results['best_model_state'], "Best model state is None")
-        
-        # Check stage transitions
-        expected_stages = [(1, 'epoch'), (2, 'epoch'), (3, 'epoch'), (4, 'epoch')]
-        self.assertEqual(self.model.unfreeze_state['stage_history'], expected_stages)
-
-        
-        self.assertEqual(mock_callback.calls[0]['lr'], self.config['stage_lrs'][0], f"Learning rate of head is not correct")
-        self.assertEqual(mock_callback.calls[3]['lr'], self.config['stage_lrs'][1], f"Learning rate of")
-        #self.assertEqual(mock_callback.calls('lr'), self.config['stage_lrs'][2], f"Learning rate of ")
-        #self.assertEqual(mock_callback.calls('lr'), self.config['stage_lrs'][3], f"Learning r")
-        #self.assertEqual(mock_callback.calla('lr'), self.config['stage_lrs'][4], f"Learning rate")
-
-       
-    
-    @patch('simple_ft.simple_ft.train_epoch')
-    @patch('simple_ft.simple_ft.validate')
-    @patch('torch.optim.AdamW')
-        #Initialise at 3rd stage to go to 4th 
-    def test_early_stop_final_stage(self, mock_AdamW, mock_validate, mock_train_epoch):
-        print("Test early stopping final stage")
-        self.model.epochs_in_current_stage = 0
-        num_epochs = 30
-        self.model.unfreeze_state = {'stage_history': [(1, 'epoch'), (2, 'epoch'), (3, 'epoch'), (4, 'epoch')], 
-                                     'current_stage': 4, 
-                                     'total_stages': 5}
-        mock_train_epoch.return_value = (0.6, 80.0)
-
-        val_losses = [0.41 + i*0.01 for i in range(num_epochs)]
-        val_accs = [ 83.0 - i*0.5 for i in range(num_epochs)]                           
-        mock_validate.side_effect = list(zip(val_losses, val_accs))
-        mock_callback = MockCallback()
-
-        mock_AdamW.return_value = DynamicMockOptimizer
-
-        results = train_and_evaluate(self.model, MagicMock(), MagicMock(), self.criterion, self.device,
-                                     num_epochs, self.config, callback=mock_callback)
-        
-        exp_epochs = 4
-        self.assertEqual(len(results['val_accs']), exp_epochs, f"Expected {exp_epochs} epochs, got {len(results['val_accs'])}")
-
-        self.assertEqual(self.model.unfreeze_state['current_stage'], 4, "Model should early stop")
-        self.assertEqual(len(self.model.unfreeze_state['stage_history']), 4, "No new stage transitions should have occurred")
-        # No learning rate assertions cannot make it start at stage 3 currently and no hugely important just need to know it is at the right stage.
-        
-    @patch('simple_ft.simple_ft.train_epoch')
-    @patch('simple_ft.simple_ft.validate')
-    @patch('torch.optim.AdamW')
-    def test_stagnation_n_improv(self, mock_AdamW, mock_validate, mock_train_epoch):
-        print("Test stagnation n improvement")
-        self.model.epochs_in_current_stage = 0
-        num_epochs = 30
-        mock_train_epoch.return_value = (0.5, 80.0)
-        val_losses = [0.4, 0.39, 0.37] + [0.37] * 3 + [0.4 - i*0.01 for i in range(24)]
-        val_accs =  [82.0, 82.5, 83.0] + [83.0] * 3 + [84.0 + i*0.05 for i in range(24)]
-                             #           #                                                                       #
-        mock_validate.side_effect = list(zip(val_losses, val_accs))
-        mock_callback = MockCallback()
-
-        mock_AdamW.side_effect = DynamicMockOptimizer
-
-        results = train_and_evaluate(self.model, MagicMock(), MagicMock(), self.criterion, self.device,
-                                     num_epochs, self.config, callback=mock_callback)
-        
-        self.assertEqual(self.model.unfreeze_state['current_stage'], 4, f"All stages should be unfrozen")
-        self.assertEqual(mock_callback.calls[-1]['lr'], self.config['stage_lrs'][4], f"End learning rate not correct")
-        
-        ex_stage_history = [(1, 'epoch'), (2, 'performance'), (3, 'epoch'), (4, 'epoch')]
-        self.assertEqual(self.model.unfreeze_state['stage_history'], ex_stage_history)
+               # Verify plateau stopping
+                self.assertEqual(len(results['val_accs']), 24, 
+                              f"Should stop at plateau for {model_name}")
 
 if __name__ == '__main__':
-    unittest.main()
+   unittest.main()

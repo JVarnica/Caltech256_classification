@@ -1,0 +1,48 @@
+2024-10-23 13:30:20,147 - INFO - Testing pvt_v2_b3.in1k with gradual strategy...
+2024-10-23 13:30:20,148 - INFO - Starting experiment for {model_name} on {dataset_name} using {ft_strategy}
+2024-10-23 13:30:20,148 - INFO - Configuration: {config}
+2024-10-23 13:30:20,765 - INFO - Loading pretrained weights from Hugging Face hub (timm/pvt_v2_b3.in1k)
+2024-10-23 13:30:20,901 - INFO - [timm/pvt_v2_b3.in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+2024-10-23 13:30:21,157 - INFO - Missing keys (head.weight, head.bias) discovered while loading pretrained weights. This is expected if model is being adapted.
+2024-10-23 13:30:21,159 - INFO - Initialized 5 parameter groups:
+2024-10-23 13:30:21,159 - INFO - Group head: 131328 parameters
+2024-10-23 13:30:21,159 - INFO - Group stage4: 10995712 parameters
+2024-10-23 13:30:21,159 - INFO - Group stage3: 30184000 parameters
+2024-10-23 13:30:21,159 - INFO - Group stage2: 3536384 parameters
+2024-10-23 13:30:21,159 - INFO - Group embeddings: 9600 parameters
+2024-10-23 13:51:41,470 - INFO - Testing pvt_v2_b3.in1k with gradual strategy...
+2024-10-23 13:51:41,470 - INFO - Starting experiment for {model_name} on {dataset_name} using {ft_strategy}
+2024-10-23 13:51:41,470 - INFO - Configuration: {config}
+2024-10-23 13:51:42,079 - INFO - Loading pretrained weights from Hugging Face hub (timm/pvt_v2_b3.in1k)
+2024-10-23 13:51:42,196 - INFO - [timm/pvt_v2_b3.in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+2024-10-23 13:51:42,453 - INFO - Missing keys (head.weight, head.bias) discovered while loading pretrained weights. This is expected if model is being adapted.
+2024-10-23 13:51:42,454 - INFO - Initialized 5 parameter groups:
+2024-10-23 13:51:42,454 - INFO - Group head: 131328 parameters
+2024-10-23 13:51:42,454 - INFO - Group stage4: 10995712 parameters
+2024-10-23 13:51:42,455 - INFO - Group stage3: 30184000 parameters
+2024-10-23 13:51:42,455 - INFO - Group stage2: 3536384 parameters
+2024-10-23 13:51:42,455 - INFO - Group embeddings: 9600 parameters
+2024-10-23 13:52:19,819 - INFO - Testing pvt_v2_b3.in1k with gradual strategy...
+2024-10-23 13:52:19,820 - INFO - Starting experiment for {model_name} on {dataset_name} using {ft_strategy}
+2024-10-23 13:52:19,820 - INFO - Configuration: {config}
+2024-10-23 13:52:20,418 - INFO - Loading pretrained weights from Hugging Face hub (timm/pvt_v2_b3.in1k)
+2024-10-23 13:52:20,530 - INFO - [timm/pvt_v2_b3.in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+2024-10-23 13:52:20,781 - INFO - Missing keys (head.weight, head.bias) discovered while loading pretrained weights. This is expected if model is being adapted.
+2024-10-23 13:52:20,782 - INFO - Initialized 5 parameter groups:
+2024-10-23 13:52:20,782 - INFO - Group head: 131328 parameters
+2024-10-23 13:52:20,782 - INFO - Group stage4: 10995712 parameters
+2024-10-23 13:52:20,783 - INFO - Group stage3: 30184000 parameters
+2024-10-23 13:52:20,783 - INFO - Group stage2: 3536384 parameters
+2024-10-23 13:52:20,783 - INFO - Group embeddings: 9600 parameters
+2024-10-23 14:01:55,974 - INFO - Testing pvt_v2_b3.in1k with gradual strategy...
+2024-10-23 14:01:55,974 - INFO - Starting experiment for {model_name} on {dataset_name} using {ft_strategy}
+2024-10-23 14:01:55,974 - INFO - Configuration: {config}
+2024-10-23 14:01:56,588 - INFO - Loading pretrained weights from Hugging Face hub (timm/pvt_v2_b3.in1k)
+2024-10-23 14:01:56,702 - INFO - [timm/pvt_v2_b3.in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+2024-10-23 14:01:56,955 - INFO - Missing keys (head.weight, head.bias) discovered while loading pretrained weights. This is expected if model is being adapted.
+2024-10-23 14:01:56,957 - INFO - Initialized 5 parameter groups:
+2024-10-23 14:01:56,957 - INFO - Group head: 131328 parameters
+2024-10-23 14:01:56,957 - INFO - Group stage4: 10995712 parameters
+2024-10-23 14:01:56,957 - INFO - Group stage3: 30184000 parameters
+2024-10-23 14:01:56,957 - INFO - Group stage2: 3536384 parameters
+2024-10-23 14:01:56,957 - INFO - Group embeddings: 9600 parameters

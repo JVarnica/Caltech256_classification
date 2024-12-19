@@ -1,0 +1,48 @@
+2024-10-23 13:30:19,644 - INFO - Testing regnety_040.pycls_in1k with gradual strategy...
+2024-10-23 13:30:19,644 - INFO - Starting experiment for {model_name} on {dataset_name} using {ft_strategy}
+2024-10-23 13:30:19,644 - INFO - Configuration: {config}
+2024-10-23 13:30:19,882 - INFO - Loading pretrained weights from Hugging Face hub (timm/regnety_040.pycls_in1k)
+2024-10-23 13:30:20,012 - INFO - [timm/regnety_040.pycls_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+2024-10-23 13:30:20,141 - INFO - Missing keys (head.fc.weight, head.fc.bias) discovered while loading pretrained weights. This is expected if model is being adapted.
+2024-10-23 13:30:20,143 - INFO - Initialized 5 parameter groups:
+2024-10-23 13:30:20,143 - INFO - Group head: 278784 parameters
+2024-10-23 13:30:20,143 - INFO - Group stage4: 6806928 parameters
+2024-10-23 13:30:20,143 - INFO - Group stage3: 11301296 parameters
+2024-10-23 13:30:20,143 - INFO - Group stages2_1: 1448504 parameters
+2024-10-23 13:30:20,143 - INFO - Group stem: 928 parameters
+2024-10-23 13:51:40,968 - INFO - Testing regnety_040.pycls_in1k with gradual strategy...
+2024-10-23 13:51:40,968 - INFO - Starting experiment for {model_name} on {dataset_name} using {ft_strategy}
+2024-10-23 13:51:40,968 - INFO - Configuration: {config}
+2024-10-23 13:51:41,206 - INFO - Loading pretrained weights from Hugging Face hub (timm/regnety_040.pycls_in1k)
+2024-10-23 13:51:41,333 - INFO - [timm/regnety_040.pycls_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+2024-10-23 13:51:41,464 - INFO - Missing keys (head.fc.weight, head.fc.bias) discovered while loading pretrained weights. This is expected if model is being adapted.
+2024-10-23 13:51:41,466 - INFO - Initialized 5 parameter groups:
+2024-10-23 13:51:41,466 - INFO - Group head: 278784 parameters
+2024-10-23 13:51:41,466 - INFO - Group stage4: 6806928 parameters
+2024-10-23 13:51:41,466 - INFO - Group stage3: 11301296 parameters
+2024-10-23 13:51:41,466 - INFO - Group stages2_1: 1448504 parameters
+2024-10-23 13:51:41,466 - INFO - Group stem: 928 parameters
+2024-10-23 13:52:19,356 - INFO - Testing regnety_040.pycls_in1k with gradual strategy...
+2024-10-23 13:52:19,356 - INFO - Starting experiment for {model_name} on {dataset_name} using {ft_strategy}
+2024-10-23 13:52:19,356 - INFO - Configuration: {config}
+2024-10-23 13:52:19,591 - INFO - Loading pretrained weights from Hugging Face hub (timm/regnety_040.pycls_in1k)
+2024-10-23 13:52:19,698 - INFO - [timm/regnety_040.pycls_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+2024-10-23 13:52:19,813 - INFO - Missing keys (head.fc.weight, head.fc.bias) discovered while loading pretrained weights. This is expected if model is being adapted.
+2024-10-23 13:52:19,815 - INFO - Initialized 5 parameter groups:
+2024-10-23 13:52:19,815 - INFO - Group head: 278784 parameters
+2024-10-23 13:52:19,815 - INFO - Group stage4: 6806928 parameters
+2024-10-23 13:52:19,815 - INFO - Group stage3: 11301296 parameters
+2024-10-23 13:52:19,816 - INFO - Group stages2_1: 1448504 parameters
+2024-10-23 13:52:19,816 - INFO - Group stem: 928 parameters
+2024-10-23 14:01:55,322 - INFO - Testing regnety_040.pycls_in1k with gradual strategy...
+2024-10-23 14:01:55,322 - INFO - Starting experiment for {model_name} on {dataset_name} using {ft_strategy}
+2024-10-23 14:01:55,322 - INFO - Configuration: {config}
+2024-10-23 14:01:55,556 - INFO - Loading pretrained weights from Hugging Face hub (timm/regnety_040.pycls_in1k)
+2024-10-23 14:01:55,846 - INFO - [timm/regnety_040.pycls_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+2024-10-23 14:01:55,967 - INFO - Missing keys (head.fc.weight, head.fc.bias) discovered while loading pretrained weights. This is expected if model is being adapted.
+2024-10-23 14:01:55,969 - INFO - Initialized 5 parameter groups:
+2024-10-23 14:01:55,970 - INFO - Group head: 278784 parameters
+2024-10-23 14:01:55,970 - INFO - Group stage4: 6806928 parameters
+2024-10-23 14:01:55,970 - INFO - Group stage3: 11301296 parameters
+2024-10-23 14:01:55,970 - INFO - Group stages2_1: 1448504 parameters
+2024-10-23 14:01:55,970 - INFO - Group stem: 928 parameters
